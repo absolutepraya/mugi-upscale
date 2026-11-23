@@ -25,22 +25,22 @@ struct Photo {
               let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
               let rawWidth = properties[kCGImagePropertyPixelWidth] as? Int,
               let rawHeight = properties[kCGImagePropertyPixelHeight] as? Int,
-              let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
                   kCGImageSourceCreateThumbnailFromImageAlways: true,
                   kCGImageSourceCreateThumbnailWithTransform: true,
-                  kCGImageSourceThumbnailMaxPixelSize: 1600
+                  kCGImageSourceThumbnailMaxPixelSize: max(rawWidth, rawHeight)
               ] as CFDictionary) else {
             throw UpscaleError.unreadableImage
         }
 
         self.url = url
-        self.preview = NSImage(cgImage: thumbnail, size: .zero)
-        let orientation = properties[kCGImagePropertyOrientation] as? Int ?? 1
-        self.width = (5...8).contains(orientation) ? rawHeight : rawWidth
-        self.height = (5...8).contains(orientation) ? rawWidth : rawHeight
+        self.preview = NSImage(cgImage: image, size: .zero)
+        self.width = image.width
+        self.height = image.height
     }
 
     var dimensions: String { "\(width) × \(height)" }
+    var pixelSize: CGSize { CGSize(width: width, height: height) }
 }
 
 enum UpscaleError: LocalizedError {
@@ -77,44 +77,55 @@ final class UpscaleJob: ObservableObject {
         if let directory { try? FileManager.default.removeItem(at: directory) }
     }
 
-    func clearResult() {
+    func clearResults() {
         guard !running else { return }
         if let directory { try? FileManager.default.removeItem(at: directory) }
         directory = nil
         finishedElapsed = nil
     }
 
-    func start(input: URL, model: UpscaleModel, completion: @escaping @MainActor @Sendable (Result<URL?, Error>) -> Void) throws {
+    func discardOutput(_ output: URL) {
+        try? FileManager.default.removeItem(at: output.deletingLastPathComponent())
+    }
+
+    func start(input: URL, model: UpscaleModel, startedAt: ContinuousClock.Instant,
+               completion: @escaping @MainActor @Sendable (Result<URL?, Error>) -> Void) throws {
         guard !running else { return }
-        let project = Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent()
-        let python = project.appending(path: ".venv/bin/python")
-        let script = project.appending(path: "upscale.py")
+        let bundle = Bundle.main.bundleURL
+        let bundledEngine = bundle.appending(path: "Contents/Resources/engine")
+        let bundledScript = bundledEngine.appending(path: "upscale.py")
         let files = FileManager.default
+        let packaged = files.fileExists(atPath: bundledScript.path)
+        let engine = packaged ? bundledEngine : bundle.deletingLastPathComponent().deletingLastPathComponent()
+        let python = packaged ? bundledEngine.appending(path: "python/bin/python3.12")
+                              : engine.appending(path: ".venv/bin/python")
+        let script = engine.appending(path: "upscale.py")
         guard files.isExecutableFile(atPath: python.path), files.fileExists(atPath: script.path) else {
             throw UpscaleError.missingSetup
         }
 
-        clearResult()
-        let directory = files.temporaryDirectory.appending(path: "4K-Upscaler-\(UUID().uuidString)")
-        try files.createDirectory(at: directory, withIntermediateDirectories: false)
-        let output = directory.appending(path: "result.png")
+        let directory = self.directory ?? files.temporaryDirectory.appending(path: "4K-Upscaler-\(UUID().uuidString)")
+        let renderDirectory = directory.appending(path: UUID().uuidString)
+        try files.createDirectory(at: renderDirectory, withIntermediateDirectories: true)
+        self.directory = directory
+        let output = renderDirectory.appending(path: "result.png")
         let process = Process()
         let pipe = Pipe()
         process.executableURL = python
-        process.arguments = ["-u", script.path, input.path, "-o", output.path, "--model", model.rawValue]
-        process.currentDirectoryURL = project
+        process.arguments = (packaged ? ["-I", "-B"] : []) + ["-u", script.path, input.path, "-o", output.path, "--model", model.rawValue]
+        process.currentDirectoryURL = engine
         process.standardOutput = pipe
         process.standardError = pipe
         do {
             try process.run()
         } catch {
-            try? files.removeItem(at: directory)
+            discardOutput(output)
             throw error
         }
 
-        self.directory = directory
         self.process = process
-        startedAt = .now
+        self.startedAt = startedAt
+        finishedElapsed = nil
         progress = nil
         status = "Preparing \(model.name)…"
         running = true
@@ -132,14 +143,15 @@ final class UpscaleJob: ObservableObject {
                         .trimmingCharacters(in: .whitespacesAndNewlines)
                     remainder.removeSubrange(...newline)
                     if !line.isEmpty { lastError = line }
-                    DispatchQueue.main.async { self.handle(line: line) }
+                    DispatchQueue.main.async { self.handle(line: line, model: model) }
                 }
             }
             process.waitUntilExit()
             let diagnostic = lastError ?? "The upscaling engine exited before saving an image."
             let succeeded = process.terminationStatus == 0 && FileManager.default.fileExists(atPath: output.path)
             DispatchQueue.main.async {
-                self.finish(output: output, succeeded: succeeded, diagnostic: diagnostic, completion: completion)
+                self.finish(output: output, succeeded: succeeded,
+                            diagnostic: diagnostic, completion: completion)
             }
         }
     }
@@ -156,17 +168,17 @@ final class UpscaleJob: ObservableObject {
         if let directory { try? FileManager.default.removeItem(at: directory) }
     }
 
-    private func handle(line: String) {
+    private func handle(line: String, model: UpscaleModel) {
         guard !cancelling else { return }
         if line.hasPrefix("Tile ") {
             let counts = line.dropFirst("Tile ".count).split(separator: "/")
             if counts.count == 2, let done = Int(counts[0]), let total = Int(counts[1]),
                total > 0, (0...total).contains(done) {
                 progress = Double(done) / Double(total)
-                status = done < total ? "Upscaling · \(done) of \(total) tiles" : "Finishing PNG…"
+                status = done < total ? "\(model.name) · \(done) of \(total) tiles" : "Finishing PNG…"
             }
         } else if line.contains(" on mps") {
-            status = "Upscaling on Metal…"
+            status = "Upscaling with \(model.name) on Metal…"
         }
     }
 
@@ -179,7 +191,7 @@ final class UpscaleJob: ObservableObject {
         running = false
         cancelling = false
         progress = nil
-        if wasCancelled || !succeeded { clearResult() }
+        if wasCancelled || !succeeded { discardOutput(output) }
         finishedElapsed = duration
         if wasCancelled {
             completion(.success(nil))
@@ -204,51 +216,36 @@ struct UpscalerApp: App {
 @MainActor
 private final class UpscalerWindowState: ObservableObject {
     @Published var source: Photo?
-    @Published var result: Photo?
+    @Published var results: [UpscaleModel: Photo] = [:]
     @Published var model = UpscaleModel.drct
+    @Published var comparingModels = false
+    @Published var zoom = PreviewZoom.fit
+    @Published var pan = ImageViewport.center
     @Published var errorMessage: String?
     @Published var activity: String?
     @Published var dragging = false
+
+    var displayedModel: UpscaleModel? {
+        if results[model] != nil { return model }
+        return UpscaleModel.allCases.first { results[$0] != nil }
+    }
+}
+
+private enum PreviewZoom: Hashable {
+    case fit, actualPixels
 }
 
 struct UpscalerView: View {
     private static let formats: [UTType] = [.png, .jpeg, .webP, .tiff]
     @StateObject private var job = UpscaleJob()
     @StateObject private var window = UpscalerWindowState()
+    @Environment(\.displayScale) private var displayScale
+    @GestureState private var dragTranslation = CGSize.zero
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(alignment: .top, spacing: 20) {
-                preview(label: "Original", photo: window.source) {
-                    VStack(spacing: 10) {
-                        Image(systemName: "photo.badge.plus").font(.system(size: 30, weight: .light))
-                        Text("Drop an image here").font(.headline)
-                        Button("Choose Image…", action: choose)
-                    }
-                }
-                .overlay {
-                    if window.dragging {
-                        RoundedRectangle(cornerRadius: 12)
-                            .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [6]))
-                            .allowsHitTesting(false)
-                    }
-                }
-                .dropDestination(for: URL.self) { urls, _ in
-                    guard let url = urls.first, urls.count == 1, !job.running else { return false }
-                    select(url)
-                    return true
-                } isTargeted: { targeted in
-                    window.dragging = targeted && !job.running
-                }
-
-                preview(label: "Upscaled", photo: window.result) {
-                    VStack(spacing: 10) {
-                        Image(systemName: "photo").font(.system(size: 30, weight: .light))
-                        Text("Your preview will appear here").font(.headline)
-                    }
-                }
-            }
-            .padding(20)
+            comparisonWorkspace
+                .padding(20)
 
             Divider()
 
@@ -269,13 +266,25 @@ struct UpscalerView: View {
                         Button("Cancel", action: job.cancel)
                             .disabled(job.cancelling)
                     } else {
-                        Button("Upscale", action: start)
+                        Button("Upscale") { render([window.model]) }
                             .buttonStyle(.borderedProminent)
                             .disabled(window.source == nil)
                     }
-                    Button("Save PNG…", action: save)
+                    if window.comparingModels {
+                        Menu("Save PNG…") {
+                            ForEach(UpscaleModel.allCases) { model in
+                                Button("Save \(model.name)…") { save(model: model) }
+                            }
+                        }
+                        .fixedSize()
+                        .disabled(job.running)
+                    } else {
+                        Button("Save PNG…") {
+                            if let model = window.displayedModel { save(model: model) }
+                        }
                         .keyboardShortcut("s")
-                        .disabled(window.result == nil || job.running)
+                        .disabled(window.displayedModel == nil || job.running)
+                    }
                 }
                 if job.running {
                     if let progress = job.progress {
@@ -329,6 +338,71 @@ struct UpscalerView: View {
         }
     }
 
+    private var comparisonWorkspace: some View {
+        let result = window.displayedModel.flatMap { window.results[$0] }
+        let reference = result?.pixelSize ?? window.source?.pixelSize
+        let rightModel = window.comparingModels ? UpscaleModel.hat : window.displayedModel
+        let spacing: CGFloat = 20
+
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Picker("Zoom", selection: $window.zoom) {
+                    Text("Fit").tag(PreviewZoom.fit)
+                    Text("1:1").tag(PreviewZoom.actualPixels)
+                }
+                .pickerStyle(.segmented)
+                .fixedSize()
+                .disabled(window.source == nil)
+                .help("At 1:1, drag either image to pan. Both views stay aligned.")
+                Spacer()
+                Button(window.comparingModels ? "Show Original" : "Compare Models", action: toggleComparison)
+                    .disabled(window.source == nil || job.running)
+                    .help(window.comparingModels
+                          ? "View the original alongside the selected model output."
+                          : "Render any missing model outputs and compare them side by side.")
+            }
+            GeometryReader { geometry in
+                let paneWidth = max(0, (geometry.size.width - spacing) / 2)
+                HStack(alignment: .top, spacing: spacing) {
+                    preview(label: window.comparingModels ? UpscaleModel.drct.name : "Original",
+                            photo: window.comparingModels ? window.results[.drct] : window.source,
+                            reference: reference) {
+                        VStack(spacing: 10) {
+                            Image(systemName: "photo.badge.plus").font(.system(size: 30, weight: .light))
+                            Text("Drop an image here").font(.headline)
+                            Button("Choose Image…", action: choose)
+                        }
+                    }
+                    .frame(width: paneWidth)
+                    .overlay {
+                        if window.dragging {
+                            RoundedRectangle(cornerRadius: 12)
+                                .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [6]))
+                                .allowsHitTesting(false)
+                        }
+                    }
+                    .dropDestination(for: URL.self) { urls, _ in
+                        guard let url = urls.first, urls.count == 1, !job.running else { return false }
+                        select(url)
+                        return true
+                    } isTargeted: { targeted in
+                        window.dragging = targeted && !job.running
+                    }
+
+                    preview(label: rightModel?.name ?? "Upscaled",
+                            photo: rightModel.flatMap { window.results[$0] },
+                            reference: reference) {
+                        VStack(spacing: 10) {
+                            Image(systemName: "photo").font(.system(size: 30, weight: .light))
+                            Text("Your preview will appear here").font(.headline)
+                        }
+                    }
+                    .frame(width: paneWidth)
+                }
+            }
+        }
+    }
+
     private func elapsedLabel(_ duration: Duration) -> Text {
         let pattern: Duration.TimeFormatStyle.Pattern = duration >= .seconds(3600) ? .hourMinuteSecond : .minuteSecond
         return Text("Elapsed \(duration.formatted(.time(pattern: pattern)))")
@@ -337,6 +411,7 @@ struct UpscalerView: View {
     private func preview<Placeholder: View>(
         label: String,
         photo: Photo?,
+        reference: CGSize?,
         @ViewBuilder placeholder: () -> Placeholder
     ) -> some View {
         VStack(alignment: .leading, spacing: 9) {
@@ -349,23 +424,42 @@ struct UpscalerView: View {
             }
             ZStack {
                 RoundedRectangle(cornerRadius: 12).fill(.quaternary)
-                if let photo {
-                    Image(nsImage: photo.preview)
-                        .resizable()
-                        .scaledToFit()
-                        .padding(8)
-                        .accessibilityLabel(label + " preview")
+                if let photo, let reference {
+                    GeometryReader { geometry in
+                        previewImage(photo, label: label, reference: reference, size: geometry.size)
+                    }
                 } else {
                     placeholder().foregroundStyle(.secondary)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
             Text(photo.map { label == "Original" ? $0.url.lastPathComponent : "PNG" } ?? " ")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
+    }
+
+    private func previewImage(_ photo: Photo, label: String, reference: CGSize, size: CGSize) -> some View {
+        let actualPixels = window.zoom == .actualPixels
+        let viewport = ImageViewport(size: size, pixels: reference, displayScale: displayScale, actualPixels: actualPixels)
+        let focus = viewport.panned(from: window.pan, by: dragTranslation)
+        return Image(nsImage: photo.preview)
+            .resizable()
+            .interpolation(actualPixels && photo.pixelSize == reference ? .none : .high)
+            .frame(width: viewport.imageSize.width, height: viewport.imageSize.height)
+            .position(viewport.imageCenter(at: focus))
+            .frame(width: size.width, height: size.height)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture()
+                    .updating($dragTranslation) { value, translation, _ in translation = value.translation }
+                    .onEnded { value in window.pan = viewport.panned(from: window.pan, by: value.translation) },
+                including: viewport.canPan ? .all : .none
+            )
+            .accessibilityLabel(label + " preview")
     }
 
     private func choose() {
@@ -385,26 +479,55 @@ struct UpscalerView: View {
                 throw UpscaleError.unreadableImage
             }
             window.source = try Photo(url: url)
-            window.result = nil
+            window.results = [:]
+            window.comparingModels = false
+            window.zoom = .fit
+            window.pan = ImageViewport.center
             window.activity = nil
-            job.clearResult()
+            job.clearResults()
         } catch {
             window.errorMessage = error.localizedDescription
         }
     }
 
-    private func start() {
-        guard let source = window.source else { return }
-        window.result = nil
+    private func toggleComparison() {
+        if window.comparingModels {
+            window.comparingModels = false
+            return
+        }
+        let missing = UpscaleModel.allCases.filter { window.results[$0] == nil }
+        render(missing[...], compareWhenReady: true)
+    }
+
+    private func render(_ models: ArraySlice<UpscaleModel>, compareWhenReady: Bool = false,
+                        startedAt: ContinuousClock.Instant = .now) {
+        guard let source = window.source, !job.running else { return }
+        guard let model = models.first else {
+            window.comparingModels = compareWhenReady
+            return
+        }
         window.activity = nil
         do {
-            try job.start(input: source.url, model: window.model) { outcome in
+            try job.start(input: source.url, model: model, startedAt: startedAt) { outcome in
                 do {
-                    if let url = try outcome.get() {
-                        window.result = try Photo(url: url)
-                        window.activity = "Ready to save"
-                    } else {
+                    guard let url = try outcome.get() else {
                         window.activity = "Upscaling cancelled"
+                        return
+                    }
+                    do {
+                        let photo = try Photo(url: url)
+                        if let previous = window.results.updateValue(photo, forKey: model) {
+                            job.discardOutput(previous.url)
+                        }
+                    } catch {
+                        job.discardOutput(url)
+                        throw error
+                    }
+                    if models.count > 1 {
+                        render(models.dropFirst(), compareWhenReady: compareWhenReady, startedAt: startedAt)
+                    } else {
+                        if compareWhenReady { window.comparingModels = true }
+                        window.activity = "Ready to save"
                     }
                 } catch {
                     window.errorMessage = error.localizedDescription
@@ -415,11 +538,12 @@ struct UpscalerView: View {
         }
     }
 
-    private func save() {
-        guard let result = window.result, let source = window.source else { return }
+    private func save(model: UpscaleModel) {
+        guard let result = window.results[model], let source = window.source else { return }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.png]
-        panel.nameFieldStringValue = source.url.deletingPathExtension().lastPathComponent + "-4k.png"
+        let stem = source.url.deletingPathExtension().lastPathComponent
+        panel.nameFieldStringValue = "\(stem)-\(model.rawValue)-4k.png"
         panel.directoryURL = source.url.deletingLastPathComponent()
         panel.begin { response in
             guard response == .OK, let destination = panel.url else { return }

@@ -2,8 +2,13 @@
 set -eu
 cd "$(dirname "$0")"
 
-uv sync --locked --python 3.12
-mkdir -p models input output
+case "${1:-}" in
+    "") uv sync --locked --python 3.12
+        mkdir -p input output ;;
+    --models-only) ;;
+    *) printf 'Usage: %s [--models-only]\n' "$0" >&2; exit 2 ;;
+esac
+mkdir -p models
 
 install_model() (
     name=$1 revision=$2 checksum=$3
@@ -13,7 +18,7 @@ install_model() (
     fi
     temporary=$(mktemp "models/$name.XXXXXX")
     trap 'rm -f "$temporary"' EXIT
-    curl -fL --retry 2 "https://huggingface.co/Phips/$name/resolve/$revision/$name.safetensors?download=true" -o "$temporary"
+    curl -fsSL --retry 2 "https://huggingface.co/Phips/$name/resolve/$revision/$name.safetensors?download=true" -o "$temporary"
     printf '%s  %s\n' "$checksum" "$temporary" | shasum -a 256 -c
     mv "$temporary" "$target"
 )

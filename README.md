@@ -30,7 +30,35 @@ Choose or drop a photo, select a model, and click **Upscale**. When the
 second preview appears, click **Save PNG…**. The bar shows completed
 tiles. The elapsed timer includes model loading and PNG preparation.
 
+Use **1:1** to inspect the output at one image pixel per display pixel.
+Drag either pane to pan both together. The original scales to the same
+framing as the output. **Fit** returns to the whole image.
+
+Click **Compare Models** to view DRCT-L and HAT-L side by side. The app
+runs any missing model first and keeps both results for the current
+photo. Use **Show Original** to switch back, or **Save PNG…** to choose
+which model output to export.
+
 Rebuild with `./build-app.sh` after editing the Swift source.
+
+## Install from a DMG
+
+Download the current DMG from [GitHub Releases](https://github.com/absolutepraya/4k-upscaling/releases)
+with an account that has access to the repository. Follow the
+[installation guide](packaging/INSTALL.md), also included in the disk image.
+
+## Build and release a DMG
+
+On an Apple Silicon Mac with `uv` and the Apple developer tools, run
+`./packaging/build-dmg.sh 0.1.0`. The DMG appears under `build/dist/`.
+It contains the app, Python, its locked dependencies, and both verified
+model files so an installed copy can run offline. The app uses ad-hoc
+signing.
+
+The [CI workflow](.github/workflows/ci.yml) checks and builds the app on
+pull requests and pushes to `main`. Start the [macOS Release workflow](.github/workflows/macos-release.yml)
+from `main` with a new version such as `0.1.0`. It builds the DMG and
+publishes it with a SHA-256 checksum and install instructions on GitHub Releases.
 
 ## Command line
 
