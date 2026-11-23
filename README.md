@@ -12,8 +12,8 @@ macOS SDK from Xcode or Apple's Command Line Tools, and
 If the Apple tools are missing, run `xcode-select --install`.
 
 ```sh
-git clone https://github.com/absolutepraya/4K-Upscaling.git
-cd 4K-Upscaling
+git clone https://github.com/absolutepraya/4k-upscaling.git
+cd 4k-upscaling
 ./setup.sh
 ./build-app.sh
 open "build/4K Upscaler.app"
