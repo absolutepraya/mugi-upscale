@@ -1,0 +1,11 @@
+[project]
+name = "local-4k-upscaling"
+version = "0.1.0"
+description = "Local landscape upscaling on Apple Silicon"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "pillow==13.0.0",
+    "spandrel==0.4.2",
+    "torch==2.15.0",
+    "torchvision==0.29.2",
+]
