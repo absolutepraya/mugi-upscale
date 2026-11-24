@@ -4,7 +4,9 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 enum UpscaleModel: String, CaseIterable, Identifiable {
-    case drct, hat, seedvr2
+    case seedvr2, drct, hat
+
+    static let defaultChoice: Self = .seedvr2
 
     var id: Self { self }
     var name: String {
@@ -169,7 +171,8 @@ final class UpscaleJob: ObservableObject {
         try? FileManager.default.removeItem(at: output.deletingLastPathComponent())
     }
 
-    func start(input: URL, model: UpscaleModel, longEdge: Int, tile: Int, startedAt: ContinuousClock.Instant,
+    func start(input: URL, model: UpscaleModel, longEdge: Int, enlarges: Bool, tile: Int,
+               startedAt: ContinuousClock.Instant,
                completion: @escaping @MainActor @Sendable (Result<URL?, Error>) -> Void) throws {
         guard !running else { return }
         let files = FileManager.default
@@ -196,7 +199,7 @@ final class UpscaleJob: ObservableObject {
         self.startedAt = startedAt
         finishedElapsed = nil
         progress = nil
-        status = "Preparing \(model.name)…"
+        status = enlarges ? "Preparing \(model.name)…" : "Resizing…"
         running = true
 
         observeEngine(process, pipe: pipe) { line in
@@ -335,6 +338,132 @@ enum OutputSize: Int, CaseIterable, Identifiable {
     }
 }
 
+private enum OutputSizeMode: String, CaseIterable, Identifiable {
+    case scale = "Scale", longEdge = "Long edge", width = "Width", height = "Height"
+
+    var id: Self { self }
+
+    var initialValue: String {
+        switch self {
+        case .scale: "2"
+        case .longEdge, .width, .height: String(OutputSize.fourK.rawValue)
+        }
+    }
+}
+
+private struct OutputSizeRequest: Equatable {
+    static let maximumEdge = 8192
+
+    var mode: OutputSizeMode
+    var value: String
+
+    init(mode: OutputSizeMode, value: String) {
+        self.mode = mode
+        self.value = value
+    }
+
+    init(stored: String, legacyLongEdge: Int) {
+        let parts = stored.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+        let mode = parts.count == 2 ? OutputSizeMode(rawValue: String(parts[0])) : nil
+        self.init(mode: mode ?? .longEdge, value: mode == nil ? String(legacyLongEdge) : String(parts[1]))
+    }
+
+    var stored: String { "\(mode.rawValue):\(value)" }
+
+    var amount: Double? {
+        let input = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if mode == .scale {
+            let separator = Locale.current.decimalSeparator ?? "."
+            let decimal = input.replacingOccurrences(of: separator, with: ".")
+                .replacingOccurrences(of: ",", with: ".")
+            guard let factor = Double(decimal),
+                  factor.isFinite, factor > 0 else { return nil }
+            return factor
+        }
+        guard let pixels = Int(input), (1...Self.maximumEdge).contains(pixels) else { return nil }
+        return Double(pixels)
+    }
+
+    func target(for photo: Photo) -> OutputTarget? {
+        guard let amount else { return nil }
+        let sourceEdge = max(photo.width, photo.height)
+        let edge = switch mode {
+        case .scale: amount * Double(sourceEdge)
+        case .longEdge: amount
+        case .width: amount * Double(sourceEdge) / Double(photo.width)
+        case .height: amount * Double(sourceEdge) / Double(photo.height)
+        }
+        let rounded = max(1, edge.rounded(.toNearestOrEven))
+        guard rounded <= Double(Self.maximumEdge) else { return nil }
+        let longEdge = Int(rounded)
+        func scaled(_ side: Int) -> Int {
+            max(1, Int((Double(side) * Double(longEdge) / Double(sourceEdge)).rounded(.toNearestOrEven)))
+        }
+        return OutputTarget(width: scaled(photo.width), height: scaled(photo.height), sourceEdge: sourceEdge)
+    }
+}
+
+private struct OutputTarget: Equatable {
+    let width: Int
+    let height: Int
+    let sourceEdge: Int
+
+    var longEdge: Int { max(width, height) }
+    var enlarges: Bool { longEdge > sourceEdge }
+    var scale: Double { Double(longEdge) / Double(sourceEdge) }
+    var dimensions: String { "\(width.formatted()) × \(height.formatted())" }
+    var scaleLabel: String {
+        let decimalPlaces = scale < 0.01 ? 4 : 2
+        return "\(scale.formatted(.number.precision(.fractionLength(0...decimalPlaces))))×"
+    }
+
+    func matches(_ photo: Photo?) -> Bool {
+        photo?.width == width && photo?.height == height
+    }
+}
+
+private struct OutputSizeFields: View {
+    @Binding var request: OutputSizeRequest
+
+    var body: some View {
+        Picker("Size by", selection: Binding(get: { request.mode }, set: { mode in
+            request = OutputSizeRequest(mode: mode, value: mode.initialValue)
+        })) {
+            ForEach(OutputSizeMode.allCases) { mode in
+                Text(mode.rawValue).tag(mode)
+            }
+        }
+        .pickerStyle(.segmented)
+
+        LabeledContent(request.mode.rawValue) {
+            TextField(request.mode.rawValue, text: $request.value)
+                .labelsHidden()
+                .textFieldStyle(.roundedBorder)
+                .monospacedDigit()
+                .frame(width: 74)
+            Text(request.mode == .scale ? "×" : "px")
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            if request.mode == .scale || request.mode == .longEdge {
+                Menu("Presets") {
+                    if request.mode == .scale {
+                        ForEach([1.5, 2, 3, 4], id: \.self) { factor in
+                            let value = factor.formatted(.number)
+                            Button("\(value)×") { request.value = value }
+                        }
+                    } else {
+                        ForEach(OutputSize.allCases) { size in
+                            Button(size.name) { request.value = String(size.rawValue) }
+                        }
+                    }
+                }
+                .fixedSize()
+                .accessibilityLabel("\(request.mode.rawValue) presets")
+            }
+        }
+    }
+}
+
 enum OutputFormat: String, CaseIterable, Identifiable {
     case png, jpeg, tiff, heic
 
@@ -427,7 +556,7 @@ enum ImageExporter {
 }
 
 private enum SettingsKey {
-    static let all = ["appearance", "defaultModel", "longEdge", "tile", "autoSave",
+    static let all = ["appearance", "defaultModel", "longEdge", "defaultOutputSize", "tile", "autoSave",
                       "outputFolder", "outputFormat", "quality", "haptics", "settingsTab"]
 }
 
@@ -455,8 +584,9 @@ struct SettingsView: View {
 
 private struct GeneralSettings: View {
     @AppStorage("appearance") private var appearance = AppearanceChoice.system
-    @AppStorage("defaultModel") private var defaultModel = UpscaleModel.drct
+    @AppStorage("defaultModel") private var defaultModel = UpscaleModel.defaultChoice
     @AppStorage("longEdge") private var longEdge = OutputSize.fourK.rawValue
+    @AppStorage("defaultOutputSize") private var defaultOutputSize = ""
     @AppStorage("tile") private var tile = 256
     @AppStorage("haptics") private var haptics = true
     @State private var confirmingReset = false
@@ -483,11 +613,21 @@ private struct GeneralSettings: View {
                         .foregroundStyle(.secondary)
                     ModelBars(model: defaultModel)
                 }
-                Picker("Output size", selection: $longEdge) {
-                    ForEach(OutputSize.allCases) { size in
-                        Text(size.name).tag(size.rawValue)
-                    }
-                }
+            }
+
+            Section("Default output size") {
+                let request = OutputSizeRequest(stored: defaultOutputSize, legacyLongEdge: longEdge)
+                OutputSizeFields(request: Binding(get: {
+                    OutputSizeRequest(stored: defaultOutputSize, legacyLongEdge: longEdge)
+                }, set: { defaultOutputSize = $0.stored }))
+                Text(request.amount == nil
+                     ? "Enter a positive scale or a pixel value from 1 to \(OutputSizeRequest.maximumEdge.formatted())."
+                     : "Used when you open an image. Mugi preserves the original aspect ratio.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Advanced") {
                 Picker("Tile size", selection: $tile) {
                     ForEach([128, 192, 256, 320, 384], id: \.self) { size in
                         Text(size == 256 ? "\(size) px (default)" : "\(size) px").tag(size)
@@ -724,8 +864,9 @@ private struct AboutSettings: View {
 @MainActor
 private final class UpscalerWindowState: ObservableObject {
     @Published var source: Photo?
+    @Published var outputSize: OutputSizeRequest?
     @Published var results: [UpscaleModel: Photo] = [:]
-    @Published var model = UpscaleModel(rawValue: UserDefaults.standard.string(forKey: "defaultModel") ?? "") ?? .drct
+    @Published var model = UpscaleModel(rawValue: UserDefaults.standard.string(forKey: "defaultModel") ?? "") ?? .defaultChoice
     @Published var comparison: ModelComparison?
     @Published var zoom = PreviewZoom.fit
     @Published var pan = ImageViewport.center
@@ -753,10 +894,12 @@ struct UpscalerView: View {
     @EnvironmentObject private var library: ModelLibrary
     @StateObject private var window = UpscalerWindowState()
     @State private var enlargedPreview: EnlargedPreview?
+    @State private var showingOutputSize = false
     @Environment(\.displayScale) private var displayScale
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("appearance") private var appearance = AppearanceChoice.system
     @AppStorage("longEdge") private var longEdge = OutputSize.fourK.rawValue
+    @AppStorage("defaultOutputSize") private var defaultOutputSize = ""
     @AppStorage("tile") private var tile = 256
     @AppStorage("autoSave") private var autoSave = false
     @AppStorage("outputFolder") private var outputFolder = ""
@@ -764,6 +907,17 @@ struct UpscalerView: View {
     @AppStorage("quality") private var quality = 0.95
     @AppStorage("haptics") private var haptics = true
     @GestureState private var dragTranslation = CGSize.zero
+
+    private var defaultSizeRequest: OutputSizeRequest {
+        let request = OutputSizeRequest(stored: defaultOutputSize, legacyLongEdge: longEdge)
+        if request.amount != nil { return request }
+        return OutputSizeRequest(mode: .longEdge, value: String(longEdge))
+    }
+
+    private var outputTarget: OutputTarget? {
+        guard let source = window.source else { return nil }
+        return (window.outputSize ?? defaultSizeRequest).target(for: source)
+    }
 
     var body: some View {
         VStack(spacing: 10) {
@@ -791,6 +945,12 @@ struct UpscalerView: View {
             library.refresh()
         }
         .onOpenURL { select($0) }
+        .onChange(of: outputTarget) { _, target in
+            if let comparison = window.comparison,
+               !comparison.models.allSatisfy({ target?.matches(window.results[$0]) == true }) {
+                window.comparison = nil
+            }
+        }
         .onChange(of: appearance, initial: true) { _, choice in
             NSApp.appearance = choice.appearance
         }
@@ -879,25 +1039,28 @@ struct UpscalerView: View {
 
     private var controlBar: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Picker("Model", selection: $window.model) {
-                ForEach(UpscaleModel.allCases) { model in
-                    Text(model.name).tag(model)
+            HStack(spacing: 12) {
+                Picker("Model", selection: $window.model) {
+                    ForEach(UpscaleModel.allCases) { model in
+                        Text(model.name).tag(model)
+                    }
                 }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .disabled(job.running)
+                Text(window.model.description)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentTransition(.opacity)
+                    .animation(motion, value: window.model)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
-            .disabled(job.running)
-            Text(window.model.description)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .contentTransition(.opacity)
-                .animation(motion, value: window.model)
             HStack(spacing: 12) {
                 ModelBars(model: window.model)
-                if window.model == .seedvr2 && !library.seedInstalled && library.operation == nil {
+                if window.model == .seedvr2 && outputTarget?.enlarges != false &&
+                    !library.seedInstalled && library.operation == nil {
                     Spacer(minLength: 4)
                     Button(library.downloadTitle) { library.start(.download) }
                         .controlSize(.regular)
@@ -936,7 +1099,8 @@ struct UpscalerView: View {
     }
 
     private var actionButtons: some View {
-        let selectedDone = window.results[window.model] != nil
+        let target = outputTarget
+        let selectedDone = target?.matches(window.results[window.model]) == true
         let saveLabel = Label("Save \(outputFormat.name)…", systemImage: "square.and.arrow.down")
         return GlassGroup {
             HStack(spacing: 12) {
@@ -949,12 +1113,15 @@ struct UpscalerView: View {
                     .actionButton(prominent: false)
                     .transition(.blurReplace)
                 } else {
+                    outputSizeButton
                     Button { render([window.model]) } label: {
-                        Label("Upscale", systemImage: "arrow.up.left.and.arrow.down.right")
+                        Label(target?.enlarges == false ? "Resize" : "Upscale",
+                              systemImage: "arrow.up.left.and.arrow.down.right")
                     }
                     .keyboardShortcut(.return, modifiers: .command)
-                    .help("Upscale with \(window.model.name) (⌘↩)")
-                    .disabled(window.source == nil || (window.model == .seedvr2 && !library.canUseSeed))
+                    .help(target?.enlarges == false ? "Resize to the selected output size (⌘↩)"
+                          : "Upscale with \(window.model.name) (⌘↩)")
+                    .disabled(target == nil || (target?.enlarges == true && window.model == .seedvr2 && !library.canUseSeed))
                     .actionButton(prominent: !selectedDone)
                     .transition(.blurReplace)
                 }
@@ -988,6 +1155,45 @@ struct UpscalerView: View {
         .animation(motion, value: job.running)
     }
 
+    private var outputSizeButton: some View {
+        Button { showingOutputSize.toggle() } label: {
+            Label("Output Size", systemImage: "aspectratio")
+        }
+        .fixedSize()
+        .disabled(window.source == nil)
+        .actionButton(prominent: false)
+        .popover(isPresented: $showingOutputSize, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 12) {
+                OutputSizeFields(request: Binding(get: { window.outputSize ?? defaultSizeRequest }, set: {
+                    window.outputSize = $0
+                    window.activity = nil
+                }))
+                if let target = outputTarget {
+                    Text("\(target.dimensions) px at \(target.scaleLabel)")
+                        .monospacedDigit()
+                } else {
+                    Text("Enter a size with a long edge from 1 to \(OutputSizeRequest.maximumEdge.formatted()) px.")
+                        .foregroundStyle(.secondary)
+                }
+                HStack {
+                    Button("Use Default") {
+                        window.outputSize = nil
+                        window.activity = nil
+                    }
+                    .disabled(window.outputSize == nil)
+                    Spacer()
+                    Button("Done") { showingOutputSize = false }
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(outputTarget == nil)
+                }
+            }
+            .padding(16)
+            .frame(width: 340)
+            .controlSize(.regular)
+            .font(.body)
+        }
+    }
+
     private var statusSymbol: (name: String, color: Color)? {
         guard !job.running, let activity = window.activity else { return nil }
         if activity.hasPrefix("Ready") || activity.hasPrefix("Saved") {
@@ -999,15 +1205,44 @@ struct UpscalerView: View {
 
     private var statusRow: some View {
         HStack(spacing: 8) {
-            if let symbol = statusSymbol {
-                Image(systemName: symbol.name)
-                    .foregroundStyle(symbol.color)
-                    .symbolEffect(.bounce, value: window.activity)
-                    .transition(.scale.combined(with: .opacity))
-            }
-            Text(job.running ? job.status : window.activity ?? "\(longEdge.formatted(.number.locale(Locale(identifier: "en_US")))) px long edge · Original aspect ratio · \(outputFormat.name)")
+            if job.running {
+                Text(job.status)
+                    .lineLimit(1)
+                    .contentTransition(.opacity)
+            } else {
+                HStack(spacing: 8) {
+                    if let target = outputTarget {
+                        Text(target.dimensions)
+                        Divider().frame(height: 10).accessibilityHidden(true)
+                        Text(target.scaleLabel)
+                    } else {
+                        if window.source == nil {
+                            Text("\(defaultSizeRequest.value)\(defaultSizeRequest.mode == .scale ? "×" : " px")")
+                            Divider().frame(height: 10).accessibilityHidden(true)
+                            Text("Original aspect ratio")
+                        } else {
+                            Text("Enter a valid output size")
+                        }
+                    }
+                    Divider().frame(height: 10).accessibilityHidden(true)
+                    Text(outputFormat.name)
+                }
                 .lineLimit(1)
-                .contentTransition(.opacity)
+                .layoutPriority(1)
+                .accessibilityElement(children: .combine)
+                if let activity = window.activity {
+                    if let symbol = statusSymbol {
+                        Image(systemName: symbol.name)
+                            .foregroundStyle(symbol.color)
+                            .symbolEffect(.bounce, value: window.activity)
+                            .accessibilityHidden(true)
+                    }
+                    Text(activity)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .contentTransition(.opacity)
+                }
+            }
             Spacer()
             if job.running {
                 if let progress = job.progress {
@@ -1023,7 +1258,7 @@ struct UpscalerView: View {
             }
             if library.operation == .download {
                 SeedDownloadStatus(showsModelName: true)
-            } else if window.model == .seedvr2 {
+            } else if window.model == .seedvr2 && outputTarget?.enlarges != false {
                 if library.operation == .delete {
                     Text(library.status)
                 } else if library.seedInstalled {
@@ -1070,7 +1305,7 @@ struct UpscalerView: View {
                     }
                 }
                 .controlSize(.regular)
-                .disabled(window.source == nil || job.running)
+                .disabled(outputTarget?.enlarges != true || job.running)
                 .help("Choose two models to render and compare side by side.")
                 .actionButton(prominent: false)
             }
@@ -1095,6 +1330,10 @@ struct UpscalerView: View {
 
     private func previewPanes(leftModel: UpscaleModel?, rightModel: UpscaleModel?, reference: CGSize?) -> some View {
         let spacing: CGFloat = 20
+        let result = rightModel.flatMap { window.results[$0] }
+        let resized = result.flatMap { result in
+            window.source.map { max(result.width, result.height) <= max($0.width, $0.height) }
+        } ?? false
         return GeometryReader { geometry in
             let paneWidth = max(0, (geometry.size.width - spacing) / 2)
             HStack(alignment: .top, spacing: spacing) {
@@ -1130,12 +1369,12 @@ struct UpscalerView: View {
                     window.dragging = targeted && !job.running
                 }
 
-                preview(label: rightModel?.name ?? "Upscaled",
-                        photo: rightModel.flatMap { window.results[$0] },
+                preview(label: resized ? "Resized" : rightModel?.name ?? "Upscaled",
+                        photo: result,
                         reference: reference) {
                     VStack(spacing: 10) {
                         Image(systemName: "sparkles").font(.system(size: 30, weight: .light))
-                        Text("Your 4K preview will appear here").font(.headline)
+                        Text("Your result will appear here").font(.headline)
                     }
                 }
                 .frame(width: paneWidth)
@@ -1243,6 +1482,8 @@ struct UpscalerView: View {
                 throw UpscaleError.unreadableImage
             }
             window.source = try Photo(url: url)
+            window.outputSize = nil
+            showingOutputSize = false
             window.results = [:]
             window.comparison = nil
             window.zoom = .fit
@@ -1255,18 +1496,19 @@ struct UpscalerView: View {
     }
 
     private func compare(_ comparison: ModelComparison) {
-        let missing = comparison.models.filter { window.results[$0] == nil }
-        render(missing[...], comparison: comparison)
+        guard let target = outputTarget, target.enlarges else { return }
+        let missing = comparison.models.filter { !target.matches(window.results[$0]) }
+        render(missing[...], comparison: comparison, target: target)
     }
 
     private func render(_ models: ArraySlice<UpscaleModel>, comparison: ModelComparison? = nil,
-                        startedAt: ContinuousClock.Instant = .now) {
-        guard let source = window.source, !job.running else { return }
+                        target: OutputTarget? = nil, startedAt: ContinuousClock.Instant = .now) {
+        guard let source = window.source, let target = target ?? outputTarget, !job.running else { return }
         guard let model = models.first else {
             window.comparison = comparison
             return
         }
-        if models.contains(.seedvr2) {
+        if target.enlarges && models.contains(.seedvr2) {
             library.refresh()
             guard library.canUseSeed else {
                 window.model = .seedvr2
@@ -1276,7 +1518,8 @@ struct UpscalerView: View {
         }
         window.activity = nil
         do {
-            try job.start(input: source.url, model: model, longEdge: longEdge, tile: tile, startedAt: startedAt) { outcome in
+            try job.start(input: source.url, model: model, longEdge: target.longEdge, enlarges: target.enlarges,
+                          tile: tile, startedAt: startedAt) { outcome in
                 do {
                     guard let url = try outcome.get() else {
                         window.activity = "Upscaling cancelled"
@@ -1293,7 +1536,7 @@ struct UpscalerView: View {
                     }
                     let saved = autoSaveResult(model: model)
                     if models.count > 1 {
-                        render(models.dropFirst(), comparison: comparison, startedAt: startedAt)
+                        render(models.dropFirst(), comparison: comparison, target: target, startedAt: startedAt)
                     } else {
                         if let comparison { window.comparison = comparison }
                         if !saved { window.activity = "Ready to save" }
@@ -1314,13 +1557,15 @@ struct UpscalerView: View {
         outputFolder.isEmpty ? source.url.deletingLastPathComponent() : URL(fileURLWithPath: outputFolder, isDirectory: true)
     }
 
-    private func outputStem(for model: UpscaleModel, source: Photo) -> String {
+    private func outputStem(for model: UpscaleModel, source: Photo, result: Photo) -> String {
+        let longEdge = max(result.width, result.height)
         let tag = switch longEdge {
         case 3840, 4096: "4k"
         case 7680: "8k"
         default: "\(longEdge)px"
         }
-        return "\(source.url.deletingPathExtension().lastPathComponent)-\(model.rawValue)-\(tag)"
+        let operation = longEdge <= max(source.width, source.height) ? "resize" : model.rawValue
+        return "\(source.url.deletingPathExtension().lastPathComponent)-\(operation)-\(tag)"
     }
 
     /// Saves a finished result to the default folder when auto-save is on. Returns whether it saved.
@@ -1330,7 +1575,7 @@ struct UpscalerView: View {
             let directory = outputDirectory(for: source)
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             let destination = ImageExporter.availableURL(
-                in: directory, stem: outputStem(for: model, source: source), fileExtension: outputFormat.fileExtension)
+                in: directory, stem: outputStem(for: model, source: source, result: result), fileExtension: outputFormat.fileExtension)
             try ImageExporter.write(result.url, to: destination, format: outputFormat, quality: quality)
             window.activity = "Saved \(destination.lastPathComponent)"
             return true
@@ -1344,7 +1589,7 @@ struct UpscalerView: View {
         guard let result = window.results[model], let source = window.source else { return }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [outputFormat.type]
-        panel.nameFieldStringValue = "\(outputStem(for: model, source: source)).\(outputFormat.fileExtension)"
+        panel.nameFieldStringValue = "\(outputStem(for: model, source: source, result: result)).\(outputFormat.fileExtension)"
         panel.directoryURL = outputDirectory(for: source)
         panel.begin { response in
             guard response == .OK, let destination = panel.url else { return }
