@@ -65,12 +65,13 @@ Setup creates a local Python environment, downloads the SeedVR2 runtime source, 
 
 1. Click **Add Photo** (⌘O) or drop a photo onto the window.
 2. Select a model. The bars describe typical detail reconstruction and relative processing time. If SeedVR2 is missing, click **Download** next to its bars. The status row shows download speed and progress, and you can pause and resume.
-3. Click **Upscale**. The timer includes model loading and PNG preparation. SeedVR2 shows its processing stage and may take several minutes.
-4. When the second preview appears, click **Save…**, or turn on auto-save in Settings.
+3. Optionally click **Output Size** to set the size for this photo. Size it by **Scale** (such as 2×), **Long edge**, **Width**, or **Height**, up to 8,192 px, or pick a preset. Mugi keeps the original aspect ratio. The default comes from Settings.
+4. Click **Upscale**. The timer includes model loading and PNG preparation. SeedVR2 shows its processing stage and may take several minutes. If the chosen size is not larger than the photo, the button reads **Resize** and Mugi resizes it without a model.
+5. When the second preview appears, click **Save…**, or turn on auto-save in Settings.
 
 The icon buttons at the top right switch between System, Light, and Dark appearance and open **Settings** (⌘,).
 
-- **General:** appearance, default model, output size (3,840, 4,096, or 7,680 px on the long edge), tile size, and haptic feedback.
+- **General:** appearance, default model, default output size (by scale, long edge, width, or height), tile size under Advanced, haptic feedback, and a reset for all settings.
 - **Models:** check model availability, reveal model files in Finder, and download or delete SeedVR2. DRCT-L and HAT-L are included with Mugi.
 - **Output:** auto-save, the default output folder, and the image format, with a quality slider for JPEG and HEIC.
 - **About:** credits, source code, and model licenses.
@@ -114,12 +115,13 @@ Other aspect ratios keep their framing. The CLI refuses to overwrite an existing
 Formatting uses [Oxfmt](https://oxc.rs/docs/guide/usage/formatter) and linting uses [Oxlint](https://oxc.rs/docs/guide/usage/linter). Install them with `pnpm install`, then run the fast checks CI runs:
 
 ```sh
-pnpm run check        # format check, lint, script syntax, unit tests (about a second)
+pnpm run check        # format check, lint, script syntax, lockfile check, unit tests (about a second)
+pnpm run lint:shell   # shellcheck on the shell scripts (needs shellcheck installed)
 pnpm run fmt          # apply formatting
 pnpm run test:manual  # real upscale of a tiny image with a model; local only, never in CI
 ```
 
-The manual test needs the environment and weights from `./setup.sh`. Set `MODEL=hat` or `MODEL=seedvr2` to try another model. New worktrees created in T3 Code set themselves up through [`t3.json`](t3.json).
+CI runs the same checks, then builds both app variants. The manual test needs the environment and weights from `./setup.sh`. Set `MODEL=hat` or `MODEL=seedvr2` to try another model. New worktrees created in T3 Code set themselves up through [`t3.json`](t3.json). See [`AGENTS.md`](AGENTS.md) for the project conventions that contributors and coding agents follow.
 
 ## How it works
 
