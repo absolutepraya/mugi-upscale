@@ -11,7 +11,7 @@ Upscale photos to 4K on your Mac. Everything runs locally on the GPU, so your ph
 ![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-arm64-555555?style=flat-square)
 ![Swift 6](https://img.shields.io/badge/Swift-6-f05138?style=flat-square&logo=swift&logoColor=white)
 ![Python 3.12](https://img.shields.io/badge/Python-3.12-3776ab?style=flat-square&logo=python&logoColor=white)
-[![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
+[![License](https://img.shields.io/badge/License-PolyForm_Noncommercial_1.0.0-blue?style=flat-square)](LICENSE)
 
 [Features](#features) • [Install](#install) • [Use the app](#use-the-app) • [Command line](#command-line) • [Models](#models) • [Build a DMG](#build-a-dmg)
 
@@ -94,17 +94,29 @@ uv run --locked upscale.py "/path/to/landscape.png" --model hat -o output/landsc
 uv run --locked upscale.py "/path/to/generated.png" --model seedvr2 -o output/generated-seedvr2-4k.png
 ```
 
-| Option | Default | What it does |
-|---|---|---|
-| `--model` | `drct` | `drct` for clean images, `hat` for compression and blur, or `seedvr2` to reconstruct textures |
-| `--long-edge` | `3840` | Target size of the long edge in pixels. A 16:9 input becomes 3840 × 2160. Use `4096` for a 4,096-pixel long edge |
-| `--tile` | `256` | DRCT-L and HAT-L input tile size: `128`, `192`, `256`, `320`, or `384`. Use `192` or `128` if Metal runs out of memory |
-| `--device` | `mps` | `mps` runs on the GPU through Metal. DRCT-L and HAT-L also support `cpu` |
+| Option        | Default | What it does                                                                                                           |
+| ------------- | ------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `--model`     | `drct`  | `drct` for clean images, `hat` for compression and blur, or `seedvr2` to reconstruct textures                          |
+| `--long-edge` | `3840`  | Target size of the long edge in pixels. A 16:9 input becomes 3840 × 2160. Use `4096` for a 4,096-pixel long edge       |
+| `--tile`      | `256`   | DRCT-L and HAT-L input tile size: `128`, `192`, `256`, `320`, or `384`. Use `192` or `128` if Metal runs out of memory |
+| `--device`    | `mps`   | `mps` runs on the GPU through Metal. DRCT-L and HAT-L also support `cpu`                                               |
 
 Other aspect ratios keep their framing. The CLI refuses to overwrite an existing output path, so use a new filename or directory to rerun.
 
 > [!TIP]
 > Compare foliage, fog, fine edges, and repeating textures at 100% zoom. SeedVR2 can introduce new detail and change the color or shape of fine features.
+
+## Develop
+
+Formatting uses [Oxfmt](https://oxc.rs/docs/guide/usage/formatter) and linting uses [Oxlint](https://oxc.rs/docs/guide/usage/linter). Install them with `pnpm install`, then run the fast checks CI runs:
+
+```sh
+pnpm run check        # format check, lint, script syntax, unit tests (about a second)
+pnpm run fmt          # apply formatting
+pnpm run test:manual  # real upscale of a tiny image with a model; local only, never in CI
+```
+
+The manual test needs the environment and weights from `./setup.sh`. Set `MODEL=hat` or `MODEL=seedvr2` to try another model. New worktrees created in T3 Code set themselves up through [`t3.json`](t3.json).
 
 ## How it works
 
@@ -121,7 +133,7 @@ Setup downloads these weights from Philip Hofmann's model repositories under [CC
 
 SeedVR2 uses the [upstream CLI integration](https://github.com/numz/ComfyUI-SeedVR2_VideoUpscaler/tree/4490bd1f482e026674543386bb2a4d176da245b9) and the 3B Q8 model. Its weights are verified on download and cached in `~/Library/Caches/dev.abhipraya.local-upscaler/SeedVR2`.
 
-The application and CLI source are under the [MIT License](LICENSE).
+The application and CLI source are under the [PolyForm Noncommercial License 1.0.0](LICENSE). See [License](#license) below. The third-party models and the SeedVR2 runtime keep their own licenses.
 
 ## Build a DMG
 
@@ -133,4 +145,13 @@ On an Apple Silicon Mac with `uv` and the Apple developer tools:
 
 The DMG appears under `build/dist/`. It contains the app, Python, its locked dependencies, and the DRCT-L and HAT-L weights. Use **Download** in the app to install SeedVR2.
 
-The [CI workflow](.github/workflows/ci.yml) checks and builds the app on pull requests and pushes to `main`. To publish a release, start the [macOS Release workflow](.github/workflows/macos-release.yml) from `main` with a new version such as `0.1.0`. It builds the DMG and publishes it to GitHub Releases with a SHA-256 checksum and the install instructions.
+The [CI workflow](.github/workflows/ci.yml) runs the fast checks, then builds the app, on pull requests and pushes to `main`. To publish a release, start the [macOS Release workflow](.github/workflows/macos-release.yml) from `main` with a new version such as `0.1.0`. It builds the DMG and publishes a release named `Mugi <version>` with the DMG, a SHA-256 checksum, the install instructions, and notes generated from the merged pull requests. It refuses to run if that version's release already exists.
+
+## License
+
+Mugi is **source-available**, not open source. It is under the [PolyForm Noncommercial License 1.0.0](LICENSE).
+
+- **Allowed, free:** personal use, hobby projects, study, and research. You may fork it, change it, and share your version with other people, as long as you do not charge for it. Charities, schools, public research bodies, and government institutions may also use it.
+- **Needs a commercial license:** selling Mugi or a product built on it, running it as a paid service, or using it inside a for-profit company or organization, even only internally.
+
+To ask about a commercial license, contact [Daffa Abhipraya](https://github.com/absolutepraya) on GitHub.

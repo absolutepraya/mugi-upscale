@@ -1,0 +1,22 @@
+{
+  "name": "mugi-upscale",
+  "private": true,
+  "description": "Development tooling for Mugi. The app itself is Swift and Python.",
+  "license": "SEE LICENSE IN LICENSE",
+  "scripts": {
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check",
+    "lint": "oxlint --deny-warnings --no-error-on-unmatched-pattern",
+    "check:syntax": "sh -n build-app.sh && sh -n setup.sh && sh -n scripts/smoke-upscale.sh && bash -n packaging/build-dmg.sh && python3 -m py_compile upscale.py seedvr2.py",
+    "test": "uv run --no-project --with pillow==13.0.0 python -m unittest discover -s tests -v",
+    "check": "pnpm run fmt:check && pnpm run lint && pnpm run check:syntax && pnpm run check:lock && pnpm run test",
+    "test:manual": "./scripts/smoke-upscale.sh",
+    "check:lock": "uv lock --check",
+    "lint:shell": "shellcheck -s sh build-app.sh setup.sh scripts/smoke-upscale.sh macOS/icon/make-icns.sh && shellcheck -s bash packaging/build-dmg.sh"
+  },
+  "devDependencies": {
+    "oxfmt": "0.80.0",
+    "oxlint": "1.95.0"
+  },
+  "packageManager": "pnpm@10.30.3"
+}

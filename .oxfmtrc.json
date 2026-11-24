@@ -1,0 +1,11 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 100,
+  "ignorePatterns": [
+    "uv.lock",
+    "pnpm-lock.yaml",
+    "seedvr2-runtime/**",
+    "build/**",
+    "macOS/Info.plist"
+  ]
+}
