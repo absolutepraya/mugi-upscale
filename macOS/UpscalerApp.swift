@@ -723,6 +723,7 @@ private struct FrostedBackground: NSViewRepresentable {
             let view = NSGlassEffectView()
             view.style = .regular
             view.cornerRadius = 0
+            view.alphaValue = 0.7
             return view
         }
         #endif
