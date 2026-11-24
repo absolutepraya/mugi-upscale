@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="macOS/icon/mugi-1024.png" alt="Mugi mascot, a white blob with one green leaf" height="128" />
+<img src="assets/mugi-icon.png" alt="Mugi mascot, a white blob with one green leaf" height="128" />
 
 # Mugi
 
@@ -50,13 +50,16 @@ git clone https://github.com/absolutepraya/mugi-upscale.git
 cd mugi-upscale
 ./setup.sh
 ./build-app.sh
-open build/Mugi.app
+open "build/Mugi Dev.app"
 ```
 
 Setup creates a local Python environment, downloads the SeedVR2 runtime source, and verifies the DRCT-L and HAT-L weights (about 390 MiB in total).
 
 > [!NOTE]
 > Keep the built app in the repository's `build/` directory so it can find the environment and model weights. Rebuild with `./build-app.sh` after editing the Swift source.
+
+> [!NOTE]
+> A source build is **Mugi Dev**, with its own bundle ID, settings, and SeedVR2 cache, so it can sit next to an installed **Mugi** without touching it. `./build-app.sh --release` builds the production identity that the DMG uses. To reuse SeedVR2 weights you already downloaded without using extra disk, clone the folder: `cp -Rc ~/Library/Caches/dev.abhipraya.local-upscaler ~/Library/Caches/dev.abhipraya.local-upscaler.dev`.
 
 ## Use the app
 
