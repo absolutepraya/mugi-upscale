@@ -25,25 +25,32 @@ enum UpscaleModel: String, CaseIterable, Identifiable {
         }
     }
 
-    var detail: ModelLevel {
+    var sourceFidelity: ModelLevel {
         switch self {
-        case .drct: .init(filled: 1, label: "Subtle")
-        case .hat: .init(filled: 2, label: "Moderate")
-        case .seedvr2: .init(filled: 3, label: "High")
+        case .drct: .high
+        case .hat, .seedvr2: .moderate
         }
     }
 
-    var processingTime: ModelLevel {
+    var naturalTexture: ModelLevel {
         switch self {
-        case .drct, .hat: .init(filled: 1, label: "Standard")
-        case .seedvr2: .init(filled: 3, label: "Longer")
+        case .drct: .limited
+        case .hat: .moderate
+        case .seedvr2: .high
         }
     }
 }
 
-struct ModelLevel {
-    let filled: Int
-    let label: String
+enum ModelLevel: Int {
+    case limited = 1, moderate, high
+
+    var label: String {
+        switch self {
+        case .limited: "Limited"
+        case .moderate: "Moderate"
+        case .high: "High"
+        }
+    }
 }
 
 private struct ModelBars: View {
@@ -51,31 +58,59 @@ private struct ModelBars: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 20) {
-            bar("Detail added", level: model.detail)
-                .help("How strongly the model tends to reconstruct fine detail.")
-            bar("Processing time", level: model.processingTime)
-                .help("Typical processing time relative to the other models. It varies with your Mac and image size.")
+            bar("Source fidelity", level: model.sourceFidelity,
+                explanation: "How closely the model keeps the shapes, colors, and text from your original image.")
+            bar("Natural texture", level: model.naturalTexture,
+                explanation: "How realistic fine details like hair, skin, or fabric tend to look after upscaling a photo.")
         }
         .frame(maxWidth: 350)
     }
 
-    private func bar(_ title: String, level: ModelLevel) -> some View {
+    private func bar(_ title: String, level: ModelLevel, explanation: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                Text(title)
+            HStack(spacing: 3) {
+                Text(title).accessibilityLabel("\(title), \(level.label)")
+                MetricInfoButton(title: title, explanation: explanation)
                 Spacer(minLength: 4)
-                Text(level.label).foregroundStyle(.secondary)
+                Text(level.label)
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
             }
             .font(.caption)
             HStack(spacing: 3) {
                 ForEach(1...3, id: \.self) { segment in
                     Capsule()
-                        .fill(segment <= level.filled ? Color.accentColor : Color.secondary.opacity(0.18))
+                        .fill(segment <= level.rawValue ? Color.accentColor : Color.secondary.opacity(0.18))
                         .frame(height: 4)
                 }
             }
+            .accessibilityHidden(true)
         }
-        .accessibilityRepresentation { Text("\(title), \(level.label)") }
+    }
+}
+
+private struct MetricInfoButton: View {
+    let title: String
+    let explanation: String
+    @State private var showingExplanation = false
+
+    var body: some View {
+        Button { showingExplanation.toggle() } label: {
+            Image(systemName: "info.circle")
+                .foregroundStyle(.secondary)
+                .frame(width: 18, height: 18)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("About \(title)")
+        .help(explanation)
+        .popover(isPresented: $showingExplanation, arrowEdge: .bottom) {
+            Text(explanation)
+                .font(.callout)
+                .frame(width: 220, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(12)
+        }
     }
 }
 
