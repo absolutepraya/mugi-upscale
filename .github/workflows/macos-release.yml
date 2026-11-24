@@ -31,6 +31,14 @@ jobs:
         with:
           version: "0.13.5"
           enable-cache: false
+      - name: Refuse to overwrite an existing release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "v$VERSION" > /dev/null 2>&1; then
+            echo "Release v$VERSION already exists. Delete it and its tag first, or pick a new version." >&2
+            exit 1
+          fi
       - name: Build the DMG
         run: ./packaging/build-dmg.sh "$VERSION"
       - name: Create a GitHub release
@@ -43,4 +51,4 @@ jobs:
             shasum -a 256 "mugi-$VERSION-arm64.dmg" > "mugi-$VERSION-arm64.dmg.sha256"
           )
           gh release create "v$VERSION" "$dmg" "$dmg.sha256" \
-            --target "$GITHUB_SHA" --title "Mugi $VERSION" --notes-file packaging/INSTALL.md
+            --target "$GITHUB_SHA" --title "Mugi $VERSION" --notes-file packaging/INSTALL.md --generate-notes

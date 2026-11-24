@@ -1,0 +1,23 @@
+{
+  "$schema": "https://t3.codes/schema/t3.json",
+  "iconPath": "macOS/icon/mugi-1024.png",
+  "scripts": [
+    {
+      "name": "Setup Worktree",
+      "command": "node scripts/setup-worktree.mjs",
+      "icon": "configure",
+      "runOnWorktreeCreate": true,
+      "async": false
+    },
+    {
+      "name": "Check",
+      "command": "pnpm run check",
+      "icon": "lint"
+    },
+    {
+      "name": "Format",
+      "command": "pnpm run fmt",
+      "icon": "configure"
+    }
+  ]
+}

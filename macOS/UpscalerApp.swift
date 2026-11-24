@@ -710,7 +710,7 @@ private struct AboutSettings: View {
                     Link("HAT-L", destination: URL(string: "https://huggingface.co/Phips/4xNomos8kSCHAT-L")!)
                 }
                 Link("SeedVR2 (ByteDance Seed)", destination: URL(string: "https://github.com/numz/ComfyUI-SeedVR2_VideoUpscaler")!)
-                Text("The app and command line tool are under the MIT License.")
+                Text("The app and command line tool are under the PolyForm Noncommercial License 1.0.0.")
                     .foregroundStyle(.secondary)
             }
             .font(.caption)

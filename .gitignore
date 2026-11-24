@@ -3,9 +3,10 @@ __pycache__/
 .DS_Store
 .env
 .env.*
-/models/
+/models
 /seedvr2-runtime/
 /input/
 /output/
 /demo/
 /build/
+node_modules/
