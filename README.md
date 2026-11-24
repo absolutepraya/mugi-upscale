@@ -6,7 +6,7 @@
 
 Upscale photos to 4K on your Mac. Everything runs locally on the GPU, so your photos never leave your machine.
 
-[![CI](https://img.shields.io/github/actions/workflow/status/absolutepraya/mugi/ci.yml?style=flat-square&label=CI)](https://github.com/absolutepraya/mugi/actions)
+[![CI](https://img.shields.io/github/actions/workflow/status/absolutepraya/mugi-upscale/ci.yml?style=flat-square&label=CI)](https://github.com/absolutepraya/mugi-upscale/actions)
 ![macOS 14+](https://img.shields.io/badge/macOS-14%2B-000000?style=flat-square&logo=apple&logoColor=white)
 ![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-arm64-555555?style=flat-square)
 ![Swift 6](https://img.shields.io/badge/Swift-6-f05138?style=flat-square&logo=swift&logoColor=white)
@@ -34,7 +34,7 @@ You'll need an Apple Silicon Mac with macOS 14 or newer.
 
 ### From a DMG
 
-1. Download the current DMG from [GitHub Releases](https://github.com/absolutepraya/mugi/releases).
+1. Download the current DMG from [GitHub Releases](https://github.com/absolutepraya/mugi-upscale/releases).
 2. Open it and drag **Mugi.app** into **Applications**.
 
 > [!IMPORTANT]
@@ -45,8 +45,8 @@ You'll need an Apple Silicon Mac with macOS 14 or newer.
 You'll also need Swift 6 with a macOS SDK from Xcode or the Command Line Tools (`xcode-select --install`), and [`uv`](https://docs.astral.sh/uv/getting-started/installation/).
 
 ```sh
-git clone https://github.com/absolutepraya/mugi.git
-cd mugi
+git clone https://github.com/absolutepraya/mugi-upscale.git
+cd mugi-upscale
 ./setup.sh
 ./build-app.sh
 open build/Mugi.app
