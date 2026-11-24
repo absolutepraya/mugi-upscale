@@ -25,7 +25,8 @@ Mugi is a native SwiftUI app and a command line tool for enlarging photos with t
 - **Two models.** DRCT-L for clean photographs and HAT-L for compressed or soft ones.
 - **Compare models.** View both results side by side before you save one.
 - **Inspect at 1:1.** Pan and zoom both panes together to check fine detail.
-- **Lossless output.** Exports 8-bit sRGB PNGs, with ICC profiles and EXIF orientation handled for you.
+- **Your format.** Exports 8-bit sRGB PNG by default, or JPEG, TIFF, or HEIC, with ICC profiles and EXIF orientation handled for you.
+- **Auto-save.** Optionally save every result to a folder you choose as soon as it is ready.
 - **Wide input support.** Accepts PNG, JPEG, WebP, and TIFF.
 
 ## Install
@@ -62,13 +63,17 @@ Setup creates a local Python environment and downloads and verifies both model f
 1. Click **Add Photo** (⌘O) or drop a photo onto the window.
 2. Select a model.
 3. Click **Upscale**. The bar shows completed tiles, and the timer includes model loading and PNG preparation.
-4. When the second preview appears, click **Save PNG…**.
+4. When the second preview appears, click **Save…**, or turn on auto-save in Settings.
 
-The icon buttons at the top right switch between System, Light, and Dark appearance and open **Settings** (⌘,), where you can also choose the default model, the output size, and the tile size.
+The icon buttons at the top right switch between System, Light, and Dark appearance and open **Settings** (⌘,). Settings has three tabs:
+
+- **General:** appearance, default model, output size (3,840, 4,096, or 7,680 px on the long edge), tile size, and haptic feedback.
+- **Output:** auto-save, the default output folder, and the image format, with a quality slider for JPEG and HEIC.
+- **About:** credits, source code, and model licenses.
 
 Use **1:1** to inspect the output at one image pixel per display pixel. Drag either pane to pan both together. The original scales to the same framing as the output. **Fit** returns to the whole image.
 
-Click **Compare Models** to view DRCT-L and HAT-L side by side. Mugi runs any missing model first and keeps both results for the current photo. Use **Show Original** to switch back, or **Save PNG…** to choose which output to export.
+Click **Compare Models** to view DRCT-L and HAT-L side by side. Mugi runs any missing model first and keeps both results for the current photo. Use **Show Original** to switch back, or **Save…** to choose which output to export.
 
 ## Command line
 

@@ -270,11 +270,128 @@ enum OutputSize: Int, CaseIterable, Identifiable {
     }
 }
 
+enum OutputFormat: String, CaseIterable, Identifiable {
+    case png, jpeg, tiff, heic
+
+    var id: Self { self }
+    var name: String {
+        switch self {
+        case .png: "PNG"
+        case .jpeg: "JPEG"
+        case .tiff: "TIFF"
+        case .heic: "HEIC"
+        }
+    }
+    var fileExtension: String {
+        switch self {
+        case .png: "png"
+        case .jpeg: "jpg"
+        case .tiff: "tiff"
+        case .heic: "heic"
+        }
+    }
+    var type: UTType {
+        switch self {
+        case .png: .png
+        case .jpeg: .jpeg
+        case .tiff: .tiff
+        case .heic: .heic
+        }
+    }
+    var isLossy: Bool { self == .jpeg || self == .heic }
+}
+
+enum ImageExporter {
+    /// Writes the engine's PNG result to `destination` in the chosen format.
+    static func write(_ source: URL, to destination: URL, format: OutputFormat, quality: Double) throws {
+        if format == .png {
+            try Data(contentsOf: source).write(to: destination, options: .atomic)
+            return
+        }
+        guard let reader = CGImageSourceCreateWithURL(source as CFURL, nil),
+              var image = CGImageSourceCreateImageAtIndex(reader, 0, nil) else {
+            throw UpscaleError.failed("Could not read the upscaled image.")
+        }
+        let hasAlpha = ![.none, .noneSkipFirst, .noneSkipLast].contains(image.alphaInfo)
+        if format == .jpeg, hasAlpha {
+            image = try flattenedOnWhite(image)
+        }
+        var properties: [CFString: Any] = [:]
+        if format.isLossy { properties[kCGImageDestinationLossyCompressionQuality] = quality }
+        if format == .tiff {
+            properties[kCGImagePropertyTIFFDictionary] = [kCGImagePropertyTIFFCompression: 5]
+        }
+        let data = NSMutableData()
+        guard let writer = CGImageDestinationCreateWithData(data, format.type.identifier as CFString, 1, nil) else {
+            throw UpscaleError.failed("This Mac cannot write \(format.name) files.")
+        }
+        CGImageDestinationAddImage(writer, image, properties as CFDictionary)
+        guard CGImageDestinationFinalize(writer) else {
+            throw UpscaleError.failed("Could not encode the image as \(format.name).")
+        }
+        try (data as Data).write(to: destination, options: .atomic)
+    }
+
+    /// A name in `directory` that does not overwrite an existing file.
+    static func availableURL(in directory: URL, stem: String, fileExtension: String) -> URL {
+        var candidate = directory.appending(path: "\(stem).\(fileExtension)")
+        var number = 2
+        while FileManager.default.fileExists(atPath: candidate.path) {
+            candidate = directory.appending(path: "\(stem) \(number).\(fileExtension)")
+            number += 1
+        }
+        return candidate
+    }
+
+    private static func flattenedOnWhite(_ image: CGImage) throws -> CGImage {
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(
+                data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: 0,
+                space: space, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else {
+            throw UpscaleError.failed("Could not prepare the image for JPEG.")
+        }
+        let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+        context.setFillColor(CGColor(gray: 1, alpha: 1))
+        context.fill(bounds)
+        context.draw(image, in: bounds)
+        guard let flattened = context.makeImage() else {
+            throw UpscaleError.failed("Could not prepare the image for JPEG.")
+        }
+        return flattened
+    }
+}
+
+private enum SettingsKey {
+    static let all = ["appearance", "defaultModel", "longEdge", "tile", "autoSave",
+                      "outputFolder", "outputFormat", "quality", "haptics", "settingsTab"]
+}
+
 struct SettingsView: View {
+    @AppStorage("settingsTab") private var tab = "general"
+
+    var body: some View {
+        TabView(selection: $tab) {
+            GeneralSettings()
+                .tabItem { Label("General", systemImage: "gearshape") }
+                .tag("general")
+            OutputSettings()
+                .tabItem { Label("Output", systemImage: "square.and.arrow.down") }
+                .tag("output")
+            AboutSettings()
+                .tabItem { Label("About", systemImage: "info.circle") }
+                .tag("about")
+        }
+        .frame(width: 500)
+    }
+}
+
+private struct GeneralSettings: View {
     @AppStorage("appearance") private var appearance = AppearanceChoice.system
     @AppStorage("defaultModel") private var defaultModel = UpscaleModel.drct
     @AppStorage("longEdge") private var longEdge = OutputSize.fourK.rawValue
     @AppStorage("tile") private var tile = 256
+    @AppStorage("haptics") private var haptics = true
+    @State private var confirmingReset = false
 
     var body: some View {
         Form {
@@ -305,9 +422,138 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            Section("Feedback") {
+                Toggle("Haptic feedback when an upscale finishes", isOn: $haptics)
+            }
+
+            Section {
+                Button("Reset All Settings…", role: .destructive) { confirmingReset = true }
+            }
         }
         .formStyle(.grouped)
-        .frame(width: 440)
+        .fixedSize(horizontal: false, vertical: true)
+        .confirmationDialog("Reset all settings to their defaults?", isPresented: $confirmingReset) {
+            Button("Reset All Settings", role: .destructive) {
+                SettingsKey.all.forEach { UserDefaults.standard.removeObject(forKey: $0) }
+            }
+        }
+    }
+}
+
+private struct OutputSettings: View {
+    @AppStorage("autoSave") private var autoSave = false
+    @AppStorage("outputFolder") private var outputFolder = ""
+    @AppStorage("outputFormat") private var format = OutputFormat.png
+    @AppStorage("quality") private var quality = 0.95
+
+    var body: some View {
+        Form {
+            Section("Saving") {
+                Toggle("Save automatically when an upscale finishes", isOn: $autoSave)
+                LabeledContent("Output folder") {
+                    HStack {
+                        Text(outputFolder.isEmpty ? "Same folder as the original"
+                                                  : (outputFolder as NSString).abbreviatingWithTildeInPath)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.head)
+                        Button("Choose…", action: chooseFolder)
+                        if !outputFolder.isEmpty {
+                            Button("Reset") { outputFolder = "" }
+                        }
+                    }
+                }
+                Text("Automatic saves never overwrite a file. A number is added to the name if one already exists.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Format") {
+                Picker("Image format", selection: $format) {
+                    ForEach(OutputFormat.allCases) { format in
+                        Text(format.name).tag(format)
+                    }
+                }
+                .pickerStyle(.segmented)
+                if format.isLossy {
+                    LabeledContent("Quality") {
+                        HStack {
+                            Slider(value: $quality, in: 0.5...1)
+                                .frame(width: 180)
+                            Text("\(Int((quality * 100).rounded()))%")
+                                .monospacedDigit()
+                                .frame(width: 40, alignment: .trailing)
+                        }
+                    }
+                }
+                Text(format.isLossy
+                     ? "\(format.name) makes smaller files but discards some detail. Use PNG or TIFF to keep everything."
+                     : "\(format.name) keeps every pixel exactly as upscaled.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func chooseFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.prompt = "Choose"
+        if !outputFolder.isEmpty { panel.directoryURL = URL(fileURLWithPath: outputFolder) }
+        panel.begin { response in
+            if response == .OK, let url = panel.url { outputFolder = url.path }
+        }
+    }
+}
+
+private struct AboutSettings: View {
+    private var version: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+    }
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .frame(width: 80, height: 80)
+                .accessibilityHidden(true)
+            VStack(spacing: 2) {
+                Text("Mugi").font(.title.bold())
+                Text("Version \(version)").font(.callout).foregroundStyle(.secondary)
+            }
+            Text("Upscale photos to 4K privately on your Mac. Everything runs on your GPU and nothing leaves your machine.")
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(spacing: 6) {
+                HStack(spacing: 4) {
+                    Text("Made by")
+                    Link("Daffa Abhipraya", destination: URL(string: "https://abhipraya.dev")!)
+                }
+                Link("Source code on GitHub", destination: URL(string: "https://github.com/absolutepraya/mugi-upscale")!)
+            }
+
+            Divider().padding(.horizontal, 40)
+
+            VStack(spacing: 4) {
+                Text("Models by Philip Hofmann (Phips), CC BY 4.0")
+                HStack(spacing: 10) {
+                    Link("DRCT-L", destination: URL(string: "https://huggingface.co/Phips/4xNomos2_hq_drct-l")!)
+                    Link("HAT-L", destination: URL(string: "https://huggingface.co/Phips/4xNomos8kSCHAT-L")!)
+                }
+                Text("The app and command line tool are under the MIT License.")
+                    .foregroundStyle(.secondary)
+            }
+            .font(.caption)
+        }
+        .padding(28)
+        .frame(maxWidth: .infinity)
         .fixedSize(horizontal: false, vertical: true)
     }
 }
@@ -343,6 +589,11 @@ struct UpscalerView: View {
     @AppStorage("appearance") private var appearance = AppearanceChoice.system
     @AppStorage("longEdge") private var longEdge = OutputSize.fourK.rawValue
     @AppStorage("tile") private var tile = 256
+    @AppStorage("autoSave") private var autoSave = false
+    @AppStorage("outputFolder") private var outputFolder = ""
+    @AppStorage("outputFormat") private var outputFormat = OutputFormat.png
+    @AppStorage("quality") private var quality = 0.95
+    @AppStorage("haptics") private var haptics = true
     @GestureState private var dragTranslation = CGSize.zero
 
     var body: some View {
@@ -483,7 +734,7 @@ struct UpscalerView: View {
                         .transition(.blurReplace)
                 }
                 if window.comparingModels {
-                    Menu("Save PNG…") {
+                    Menu("Save \(outputFormat.name)…") {
                         ForEach(UpscaleModel.allCases) { model in
                             Button("Save \(model.name)…") { save(model: model) }
                         }
@@ -492,7 +743,7 @@ struct UpscalerView: View {
                     .disabled(job.running)
                     .actionButton(prominent: selectedDone)
                 } else {
-                    Button("Save PNG…") {
+                    Button("Save \(outputFormat.name)…") {
                         if let model = window.displayedModel { save(model: model) }
                     }
                     .keyboardShortcut("s")
@@ -521,7 +772,7 @@ struct UpscalerView: View {
                     .symbolEffect(.bounce, value: window.activity)
                     .transition(.scale.combined(with: .opacity))
             }
-            Text(job.running ? job.status : window.activity ?? "\(longEdge.formatted(.number.locale(Locale(identifier: "en_US")))) px long edge · Original aspect ratio · PNG")
+            Text(job.running ? job.status : window.activity ?? "\(longEdge.formatted(.number.locale(Locale(identifier: "en_US")))) px long edge · Original aspect ratio · \(outputFormat.name)")
                 .lineLimit(1)
                 .contentTransition(.opacity)
             Spacer()
@@ -668,7 +919,7 @@ struct UpscalerView: View {
                     .strokeBorder(.separator)
                     .allowsHitTesting(false)
             }
-            Text(photo.map { label == "Original" ? $0.url.lastPathComponent : "PNG" } ?? " ")
+            Text(photo.map { label == "Original" ? $0.url.lastPathComponent : outputFormat.name } ?? " ")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -757,12 +1008,15 @@ struct UpscalerView: View {
                         job.discardOutput(url)
                         throw error
                     }
+                    let saved = autoSaveResult(model: model)
                     if models.count > 1 {
                         render(models.dropFirst(), compareWhenReady: compareWhenReady, startedAt: startedAt)
                     } else {
                         if compareWhenReady { window.comparingModels = true }
-                        window.activity = "Ready to save"
-                        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
+                        if !saved { window.activity = "Ready to save" }
+                        if haptics {
+                            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
+                        }
                     }
                 } catch {
                     window.errorMessage = error.localizedDescription
@@ -773,20 +1027,49 @@ struct UpscalerView: View {
         }
     }
 
+    private func outputDirectory(for source: Photo) -> URL {
+        outputFolder.isEmpty ? source.url.deletingLastPathComponent() : URL(fileURLWithPath: outputFolder, isDirectory: true)
+    }
+
+    private func outputStem(for model: UpscaleModel, source: Photo) -> String {
+        let tag = switch longEdge {
+        case 3840, 4096: "4k"
+        case 7680: "8k"
+        default: "\(longEdge)px"
+        }
+        return "\(source.url.deletingPathExtension().lastPathComponent)-\(model.rawValue)-\(tag)"
+    }
+
+    /// Saves a finished result to the default folder when auto-save is on. Returns whether it saved.
+    private func autoSaveResult(model: UpscaleModel) -> Bool {
+        guard autoSave, let result = window.results[model], let source = window.source else { return false }
+        do {
+            let directory = outputDirectory(for: source)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let destination = ImageExporter.availableURL(
+                in: directory, stem: outputStem(for: model, source: source), fileExtension: outputFormat.fileExtension)
+            try ImageExporter.write(result.url, to: destination, format: outputFormat, quality: quality)
+            window.activity = "Saved \(destination.lastPathComponent)"
+            return true
+        } catch {
+            window.errorMessage = "Auto-save failed. \(error.localizedDescription)"
+            return false
+        }
+    }
+
     private func save(model: UpscaleModel) {
         guard let result = window.results[model], let source = window.source else { return }
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [.png]
-        let stem = source.url.deletingPathExtension().lastPathComponent
-        panel.nameFieldStringValue = "\(stem)-\(model.rawValue)-4k.png"
-        panel.directoryURL = source.url.deletingLastPathComponent()
+        panel.allowedContentTypes = [outputFormat.type]
+        panel.nameFieldStringValue = "\(outputStem(for: model, source: source)).\(outputFormat.fileExtension)"
+        panel.directoryURL = outputDirectory(for: source)
         panel.begin { response in
             guard response == .OK, let destination = panel.url else { return }
             do {
                 guard destination.resolvingSymlinksInPath() != source.url.resolvingSymlinksInPath() else {
                     throw UpscaleError.failed("Choose a different filename to keep the original image.")
                 }
-                try Data(contentsOf: result.url).write(to: destination, options: .atomic)
+                try ImageExporter.write(result.url, to: destination, format: outputFormat, quality: quality)
                 window.activity = "Saved \(destination.lastPathComponent)"
             } catch {
                 window.errorMessage = error.localizedDescription
