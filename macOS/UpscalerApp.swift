@@ -244,14 +244,20 @@ struct UpscalerView: View {
     @GestureState private var dragTranslation = CGSize.zero
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 10) {
             comparisonWorkspace
                 .padding(20)
-
-            Divider()
+                .background(Color(nsColor: .windowBackgroundColor),
+                            in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .shadow(color: .black.opacity(0.14), radius: 10, y: 3)
 
             controlBar
         }
+        .padding(.horizontal, 10)
+        .padding(.bottom, 8)
+        .background { FrostedBackground().ignoresSafeArea() }
+        .background(WindowChrome())
+        .toolbarBackground(.hidden, for: .windowToolbar)
         .frame(minWidth: 690, minHeight: 440)
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
             job.shutDown()
@@ -315,7 +321,8 @@ struct UpscalerView: View {
             statusRow
         }
         .controlSize(.large)
-        .padding(20)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
         .animation(motion, value: job.running)
     }
 
@@ -704,5 +711,35 @@ private struct GlassGroup<Content: View>: View {
         #else
         content
         #endif
+    }
+}
+
+
+/// The frosted window frame: blurs whatever is behind the window.
+private struct FrostedBackground: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .underWindowBackground
+        view.blendingMode = .behindWindow
+        view.state = .active
+        return view
+    }
+
+    func updateNSView(_ view: NSVisualEffectView, context: Context) {}
+}
+
+/// Makes the window itself see-through so the frosted frame shows, and blends in the title bar.
+private struct WindowChrome: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { ChromeView() }
+    func updateNSView(_ view: NSView, context: Context) {}
+
+    private final class ChromeView: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard let window else { return }
+            window.isOpaque = false
+            window.backgroundColor = .clear
+            window.titlebarAppearsTransparent = true
+        }
     }
 }
