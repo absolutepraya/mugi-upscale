@@ -88,7 +88,7 @@ final class UpscaleJob: ObservableObject {
         try? FileManager.default.removeItem(at: output.deletingLastPathComponent())
     }
 
-    func start(input: URL, model: UpscaleModel, startedAt: ContinuousClock.Instant,
+    func start(input: URL, model: UpscaleModel, longEdge: Int, tile: Int, startedAt: ContinuousClock.Instant,
                completion: @escaping @MainActor @Sendable (Result<URL?, Error>) -> Void) throws {
         guard !running else { return }
         let bundle = Bundle.main.bundleURL
@@ -112,7 +112,8 @@ final class UpscaleJob: ObservableObject {
         let process = Process()
         let pipe = Pipe()
         process.executableURL = python
-        process.arguments = (packaged ? ["-I", "-B"] : []) + ["-u", script.path, input.path, "-o", output.path, "--model", model.rawValue]
+        process.arguments = (packaged ? ["-I", "-B"] : []) + ["-u", script.path, input.path, "-o", output.path, "--model", model.rawValue,
+                                                                  "--long-edge", String(longEdge), "--tile", String(tile)]
         process.currentDirectoryURL = engine
         process.standardOutput = pipe
         process.standardError = pipe
@@ -249,6 +250,65 @@ struct UpscalerApp: App {
                 .pickerStyle(.inline)
             }
         }
+        Settings {
+            SettingsView()
+        }
+    }
+}
+
+/// Output sizes offered in Settings, as the long edge in pixels.
+enum OutputSize: Int, CaseIterable, Identifiable {
+    case fourK = 3840, dci4K = 4096, eightK = 7680
+
+    var id: Self { self }
+    var name: String {
+        switch self {
+        case .fourK: "3,840 px (4K UHD)"
+        case .dci4K: "4,096 px (DCI 4K)"
+        case .eightK: "7,680 px (8K)"
+        }
+    }
+}
+
+struct SettingsView: View {
+    @AppStorage("appearance") private var appearance = AppearanceChoice.system
+    @AppStorage("defaultModel") private var defaultModel = UpscaleModel.drct
+    @AppStorage("longEdge") private var longEdge = OutputSize.fourK.rawValue
+    @AppStorage("tile") private var tile = 256
+
+    var body: some View {
+        Form {
+            Picker("Appearance", selection: $appearance) {
+                ForEach(AppearanceChoice.allCases) { choice in
+                    Label(choice.name, systemImage: choice.symbol).tag(choice)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            Section("Upscaling") {
+                Picker("Default model", selection: $defaultModel) {
+                    ForEach(UpscaleModel.allCases) { model in
+                        Text(model.name).tag(model)
+                    }
+                }
+                Picker("Output size", selection: $longEdge) {
+                    ForEach(OutputSize.allCases) { size in
+                        Text(size.name).tag(size.rawValue)
+                    }
+                }
+                Picker("Tile size", selection: $tile) {
+                    ForEach([128, 192, 256, 320, 384], id: \.self) { size in
+                        Text(size == 256 ? "\(size) px (default)" : "\(size) px").tag(size)
+                    }
+                }
+                Text("Smaller tiles use less memory but take longer. Try 192 or 128 if Metal runs out of memory.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .frame(width: 440)
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -256,7 +316,7 @@ struct UpscalerApp: App {
 private final class UpscalerWindowState: ObservableObject {
     @Published var source: Photo?
     @Published var results: [UpscaleModel: Photo] = [:]
-    @Published var model = UpscaleModel.drct
+    @Published var model = UpscaleModel(rawValue: UserDefaults.standard.string(forKey: "defaultModel") ?? "") ?? .drct
     @Published var comparingModels = false
     @Published var zoom = PreviewZoom.fit
     @Published var pan = ImageViewport.center
@@ -281,6 +341,8 @@ struct UpscalerView: View {
     @Environment(\.displayScale) private var displayScale
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("appearance") private var appearance = AppearanceChoice.system
+    @AppStorage("longEdge") private var longEdge = OutputSize.fourK.rawValue
+    @AppStorage("tile") private var tile = 256
     @GestureState private var dragTranslation = CGSize.zero
 
     var body: some View {
@@ -307,25 +369,45 @@ struct UpscalerView: View {
             NSApp.appearance = choice.appearance
         }
         .toolbar {
-            Menu {
-                Picker("Appearance", selection: $appearance) {
-                    ForEach(AppearanceChoice.allCases) { choice in
-                        Label(choice.name, systemImage: choice.symbol).tag(choice)
-                    }
-                }
-                .pickerStyle(.inline)
-            } label: {
-                Label("Appearance", systemImage: appearance.symbol)
-            }
-            .menuIndicator(.hidden)
-            .help("Appearance: \(appearance.name)")
+            TitleIconItem()
 
-            Button(action: choose) {
-                Label("Open Image…", systemImage: "photo.badge.plus")
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: choose) {
+                    Label("Add Photo", systemImage: "photo.badge.plus")
+                        .labelStyle(.titleAndIcon)
+                }
+                .keyboardShortcut("o")
+                .help("Add a photo (⌘O)")
+                .disabled(job.running)
             }
-            .keyboardShortcut("o")
-            .help("Open an image (⌘O)")
-            .disabled(job.running)
+
+            #if compiler(>=6.2)
+            if #available(macOS 26, *) {
+                ToolbarSpacer(.fixed, placement: .primaryAction)
+            }
+            #endif
+
+            ToolbarItemGroup(placement: .primaryAction) {
+                Menu {
+                    Picker("Appearance", selection: $appearance) {
+                        ForEach(AppearanceChoice.allCases) { choice in
+                            Label(choice.name, systemImage: choice.symbol).tag(choice)
+                        }
+                    }
+                    .pickerStyle(.inline)
+                } label: {
+                    Label("Appearance", systemImage: appearance.symbol)
+                        .labelStyle(.iconOnly)
+                }
+                .menuIndicator(.hidden)
+                .help("Appearance: \(appearance.name)")
+
+                SettingsLink {
+                    Label("Settings", systemImage: "gearshape")
+                        .labelStyle(.iconOnly)
+                }
+                .help("Settings (⌘,)")
+            }
         }
         .alert("Mugi", isPresented: Binding(
             get: { window.errorMessage != nil },
@@ -439,7 +521,7 @@ struct UpscalerView: View {
                     .symbolEffect(.bounce, value: window.activity)
                     .transition(.scale.combined(with: .opacity))
             }
-            Text(job.running ? job.status : window.activity ?? "3,840 px long edge · Original aspect ratio · PNG")
+            Text(job.running ? job.status : window.activity ?? "\(longEdge.formatted(.number.locale(Locale(identifier: "en_US")))) px long edge · Original aspect ratio · PNG")
                 .lineLimit(1)
                 .contentTransition(.opacity)
             Spacer()
@@ -660,7 +742,7 @@ struct UpscalerView: View {
         }
         window.activity = nil
         do {
-            try job.start(input: source.url, model: model, startedAt: startedAt) { outcome in
+            try job.start(input: source.url, model: model, longEdge: longEdge, tile: tile, startedAt: startedAt) { outcome in
                 do {
                     guard let url = try outcome.get() else {
                         window.activity = "Upscaling cancelled"
@@ -805,5 +887,30 @@ private struct WindowChrome: NSViewRepresentable {
             window.backgroundColor = .clear
             window.titlebarAppearsTransparent = true
         }
+    }
+}
+
+
+/// The app icon shown to the left of the window title, without a glass pill around it.
+private struct TitleIconItem: ToolbarContent {
+    private var icon: some View {
+        Image(nsImage: NSApp.applicationIconImage)
+            .resizable()
+            .frame(width: 24, height: 24)
+            .accessibilityHidden(true)
+    }
+
+    @ToolbarContentBuilder
+    var body: some ToolbarContent {
+        #if compiler(>=6.2)
+        if #available(macOS 26, *) {
+            ToolbarItem(placement: .navigation) { icon }
+                .sharedBackgroundVisibility(.hidden)
+        } else {
+            ToolbarItem(placement: .navigation) { icon }
+        }
+        #else
+        ToolbarItem(placement: .navigation) { icon }
+        #endif
     }
 }

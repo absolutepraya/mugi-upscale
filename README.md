@@ -59,10 +59,12 @@ Setup creates a local Python environment and downloads and verifies both model f
 
 ## Use the app
 
-1. Choose or drop a photo.
+1. Click **Add Photo** (⌘O) or drop a photo onto the window.
 2. Select a model.
 3. Click **Upscale**. The bar shows completed tiles, and the timer includes model loading and PNG preparation.
 4. When the second preview appears, click **Save PNG…**.
+
+The icon buttons at the top right switch between System, Light, and Dark appearance and open **Settings** (⌘,), where you can also choose the default model, the output size, and the tile size.
 
 Use **1:1** to inspect the output at one image pixel per display pixel. Drag either pane to pan both together. The original scales to the same framing as the output. **Fit** returns to the whole image.
 
