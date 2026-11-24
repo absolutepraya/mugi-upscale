@@ -47,4 +47,6 @@ jobs:
       - name: Build
         run: |
           ./build-app.sh
+          ./build-app.sh --release
+          codesign --verify --strict 'build/Mugi Dev.app'
           codesign --verify --strict 'build/Mugi.app'

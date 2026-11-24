@@ -26,7 +26,7 @@ app="$stage/Mugi.app"
 engine="$app/Contents/Resources/engine"
 runtime="$engine/python"
 
-./build-app.sh "$app"
+./build-app.sh --release "$app"
 ./setup.sh --models-only
 ./setup.sh --seedvr2-source
 mkdir -p "$engine/models" "$runtime"

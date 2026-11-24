@@ -1,6 +1,6 @@
 {
   "$schema": "https://t3.codes/schema/t3.json",
-  "iconPath": "macOS/icon/mugi-1024.png",
+  "iconPath": "assets/mugi-icon.png",
   "scripts": [
     {
       "name": "Setup Worktree",
