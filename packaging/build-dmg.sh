@@ -13,7 +13,7 @@ if [[ "$(uname -m)" != arm64 ]]; then
 fi
 
 mkdir -p build/dist
-dmg="$PWD/build/dist/4k-upscaler-$version-arm64.dmg"
+dmg="$PWD/build/dist/mugi-$version-arm64.dmg"
 if [[ -e "$dmg" ]]; then
     printf 'The DMG already exists: %s\n' "$dmg" >&2
     exit 2
@@ -22,7 +22,7 @@ fi
 work=$(mktemp -d "${TMPDIR:-/tmp}/upscaler-dmg.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 stage="$work/disk"
-app="$stage/4K Upscaler.app"
+app="$stage/Mugi.app"
 engine="$app/Contents/Resources/engine"
 runtime="$engine/python"
 
@@ -59,8 +59,8 @@ done < <(find "$runtime" -type f \( -perm -100 -o -name '*.so' -o -name '*.dylib
 codesign --force --sign - "$app"
 codesign --verify --deep --strict "$app"
 ln -s /Applications "$stage/Applications"
-cp packaging/INSTALL.md "$stage/Install 4K Upscaler.md"
-hdiutil create -volname '4K Upscaler' -srcfolder "$stage" -fs HFS+ -format UDZO "$work/release.dmg"
+cp packaging/INSTALL.md "$stage/Install Mugi.md"
+hdiutil create -volname 'Mugi' -srcfolder "$stage" -fs HFS+ -format UDZO "$work/release.dmg"
 hdiutil verify "$work/release.dmg"
 mv "$work/release.dmg" "$dmg"
 printf 'Built %s\n' "$dmg"

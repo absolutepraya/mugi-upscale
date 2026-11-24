@@ -104,7 +104,7 @@ final class UpscaleJob: ObservableObject {
             throw UpscaleError.missingSetup
         }
 
-        let directory = self.directory ?? files.temporaryDirectory.appending(path: "4K-Upscaler-\(UUID().uuidString)")
+        let directory = self.directory ?? files.temporaryDirectory.appending(path: "Mugi-\(UUID().uuidString)")
         let renderDirectory = directory.appending(path: UUID().uuidString)
         try files.createDirectory(at: renderDirectory, withIntermediateDirectories: true)
         self.directory = directory
@@ -206,7 +206,7 @@ final class UpscaleJob: ObservableObject {
 @main
 struct UpscalerApp: App {
     var body: some Scene {
-        Window("4K Upscaler", id: "upscaler") {
+        Window("Mugi", id: "upscaler") {
             UpscalerView()
         }
         .defaultSize(width: 900, height: 600)
@@ -328,7 +328,7 @@ struct UpscalerView: View {
             .keyboardShortcut("o")
             .disabled(job.running)
         }
-        .alert("4K Upscaler", isPresented: Binding(
+        .alert("Mugi", isPresented: Binding(
             get: { window.errorMessage != nil },
             set: { if !$0 { window.errorMessage = nil } }
         )) {

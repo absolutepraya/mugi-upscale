@@ -3,8 +3,9 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key><string>dev.abhipraya.local-upscaler</string>
-    <key>CFBundleName</key><string>4K Upscaler</string>
-    <key>CFBundleDisplayName</key><string>4K Upscaler</string>
+    <key>CFBundleName</key><string>Mugi</string>
+    <key>CFBundleDisplayName</key><string>Mugi</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundleExecutable</key><string>Upscaler</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>1.0</string>
