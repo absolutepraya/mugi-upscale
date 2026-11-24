@@ -6,6 +6,6 @@ mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp macOS/Info.plist "$app/Contents/Info.plist"
 cp macOS/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
 xcrun swiftc -swift-version 6 -target arm64-apple-macos14.0 -parse-as-library -O \
-    macOS/UpscalerApp.swift macOS/ImageViewport.swift -o "$app/Contents/MacOS/Upscaler"
+    macOS/UpscalerApp.swift macOS/ImageViewport.swift macOS/ModelDownloads.swift -o "$app/Contents/MacOS/Upscaler"
 codesign --force --sign - "$app"
 printf 'Built %s/%s\n' "$(cd "$(dirname "$app")" && pwd)" "$(basename "$app")"

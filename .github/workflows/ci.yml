@@ -21,6 +21,6 @@ jobs:
           sh -n build-app.sh
           sh -n setup.sh
           bash -n packaging/build-dmg.sh
-          python3 -m py_compile upscale.py
+          python3 -m py_compile upscale.py seedvr2.py
           ./build-app.sh
           codesign --verify --strict 'build/Mugi.app'

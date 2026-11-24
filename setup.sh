@@ -4,9 +4,28 @@ cd "$(dirname "$0")"
 
 case "${1:-}" in
     "") uv sync --locked --python 3.12
-        mkdir -p input output ;;
+        mkdir -p input output
+        ./setup.sh --seedvr2-source ;;
     --models-only) ;;
-    *) printf 'Usage: %s [--models-only]\n' "$0" >&2; exit 2 ;;
+    --seedvr2-source)
+        revision=4490bd1f482e026674543386bb2a4d176da245b9
+        checksum=73ebee9da0bfa6876613e23a5f898ebd72ea938eb1d26d9322063172bfb788be
+        destination="seedvr2-runtime/$revision"
+        if [ -f "$destination/inference_cli.py" ]; then exit 0; fi
+        mkdir -p seedvr2-runtime
+        temporary=$(mktemp -d seedvr2-runtime/download.XXXXXX)
+        trap 'rm -rf "$temporary"' EXIT
+        curl -fsSL --retry 2 "https://codeload.github.com/numz/ComfyUI-SeedVR2_VideoUpscaler/tar.gz/$revision" \
+            -o "$temporary/source.tar.gz"
+        printf '%s  %s\n' "$checksum" "$temporary/source.tar.gz" | shasum -a 256 -c
+        mkdir "$temporary/runtime"
+        tar -xzf "$temporary/source.tar.gz" -C "$temporary/runtime" --strip-components 1 \
+            --include '*/inference_cli.py' --include '*/src/*' --include '*/configs_3b/*' \
+            --include '*/pos_emb.pt' --include '*/neg_emb.pt' --include '*/LICENSE'
+        test -f "$temporary/runtime/inference_cli.py"
+        mv "$temporary/runtime" "$destination"
+        exit 0 ;;
+    *) printf 'Usage: %s [--models-only | --seedvr2-source]\n' "$0" >&2; exit 2 ;;
 esac
 mkdir -p models
 

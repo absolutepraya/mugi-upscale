@@ -4,12 +4,93 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 enum UpscaleModel: String, CaseIterable, Identifiable {
-    case drct, hat
+    case drct, hat, seedvr2
 
     var id: Self { self }
-    var name: String { self == .drct ? "DRCT-L" : "HAT-L" }
+    var name: String {
+        switch self {
+        case .drct: "DRCT-L"
+        case .hat: "HAT-L"
+        case .seedvr2: "SeedVR2"
+        }
+    }
+
     var description: String {
-        self == .drct ? "Clean photos and AI landscapes" : "Soft or compressed photos"
+        switch self {
+        case .drct: "Enlarges clean images with subtle changes to detail."
+        case .hat: "Sharpens soft images and cleans up compression artifacts."
+        case .seedvr2: "Rebuilds textures in AI images and can change fine shapes and color."
+        }
+    }
+
+    var detail: ModelLevel {
+        switch self {
+        case .drct: .init(filled: 1, label: "Subtle")
+        case .hat: .init(filled: 2, label: "Moderate")
+        case .seedvr2: .init(filled: 3, label: "High")
+        }
+    }
+
+    var processingTime: ModelLevel {
+        switch self {
+        case .drct, .hat: .init(filled: 1, label: "Standard")
+        case .seedvr2: .init(filled: 3, label: "Longer")
+        }
+    }
+}
+
+struct ModelLevel {
+    let filled: Int
+    let label: String
+}
+
+private struct ModelBars: View {
+    let model: UpscaleModel
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 20) {
+            bar("Detail added", level: model.detail)
+                .help("How strongly the model tends to reconstruct fine detail.")
+            bar("Processing time", level: model.processingTime)
+                .help("Typical processing time relative to the other models. It varies with your Mac and image size.")
+        }
+        .frame(maxWidth: 350)
+    }
+
+    private func bar(_ title: String, level: ModelLevel) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Text(title)
+                Spacer(minLength: 4)
+                Text(level.label).foregroundStyle(.secondary)
+            }
+            .font(.caption)
+            HStack(spacing: 3) {
+                ForEach(1...3, id: \.self) { segment in
+                    Capsule()
+                        .fill(segment <= level.filled ? Color.accentColor : Color.secondary.opacity(0.18))
+                        .frame(height: 4)
+                }
+            }
+        }
+        .accessibilityRepresentation { Text("\(title), \(level.label)") }
+    }
+}
+
+private struct ModelComparison {
+    let left: UpscaleModel
+    let right: UpscaleModel
+
+    static let options: [Self] = [
+        .init(left: .drct, right: .hat),
+        .init(left: .drct, right: .seedvr2),
+        .init(left: .hat, right: .seedvr2),
+    ]
+
+    var models: [UpscaleModel] { [left, right] }
+
+    var title: String {
+        "\(left.name) and \(right.name)"
     }
 }
 
@@ -91,33 +172,20 @@ final class UpscaleJob: ObservableObject {
     func start(input: URL, model: UpscaleModel, longEdge: Int, tile: Int, startedAt: ContinuousClock.Instant,
                completion: @escaping @MainActor @Sendable (Result<URL?, Error>) -> Void) throws {
         guard !running else { return }
-        let bundle = Bundle.main.bundleURL
-        let bundledEngine = bundle.appending(path: "Contents/Resources/engine")
-        let bundledScript = bundledEngine.appending(path: "upscale.py")
         let files = FileManager.default
-        let packaged = files.fileExists(atPath: bundledScript.path)
-        let engine = packaged ? bundledEngine : bundle.deletingLastPathComponent().deletingLastPathComponent()
-        let python = packaged ? bundledEngine.appending(path: "python/bin/python3.12")
-                              : engine.appending(path: ".venv/bin/python")
-        let script = engine.appending(path: "upscale.py")
-        guard files.isExecutableFile(atPath: python.path), files.fileExists(atPath: script.path) else {
-            throw UpscaleError.missingSetup
-        }
-
         let directory = self.directory ?? files.temporaryDirectory.appending(path: "Mugi-\(UUID().uuidString)")
         let renderDirectory = directory.appending(path: UUID().uuidString)
         try files.createDirectory(at: renderDirectory, withIntermediateDirectories: true)
         self.directory = directory
         let output = renderDirectory.appending(path: "result.png")
-        let process = Process()
         let pipe = Pipe()
-        process.executableURL = python
-        process.arguments = (packaged ? ["-I", "-B"] : []) + ["-u", script.path, input.path, "-o", output.path, "--model", model.rawValue,
-                                                                  "--long-edge", String(longEdge), "--tile", String(tile)]
-        process.currentDirectoryURL = engine
-        process.standardOutput = pipe
-        process.standardError = pipe
+        let process: Process
         do {
+            process = try EngineLocation().process(
+                script: "upscale.py",
+                arguments: [input.path, "-o", output.path, "--model", model.rawValue,
+                            "--long-edge", String(longEdge), "--tile", String(tile), "--require-local-model"],
+                pipe: pipe)
             try process.run()
         } catch {
             discardOutput(output)
@@ -131,29 +199,13 @@ final class UpscaleJob: ObservableObject {
         status = "Preparing \(model.name)…"
         running = true
 
-        DispatchQueue.global(qos: .userInitiated).async {
-            var lastError: String?
-            var remainder = Data()
-            let reader = pipe.fileHandleForReading
-            while true {
-                let bytes = reader.availableData
-                guard !bytes.isEmpty else { break }
-                remainder.append(bytes)
-                while let newline = remainder.firstIndex(of: 10) {
-                    let line = String(decoding: remainder[..<newline], as: UTF8.self)
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-                    remainder.removeSubrange(...newline)
-                    if !line.isEmpty { lastError = line }
-                    DispatchQueue.main.async { self.handle(line: line, model: model) }
-                }
-            }
-            process.waitUntilExit()
-            let diagnostic = lastError ?? "The upscaling engine exited before saving an image."
-            let succeeded = process.terminationStatus == 0 && FileManager.default.fileExists(atPath: output.path)
-            DispatchQueue.main.async {
-                self.finish(output: output, succeeded: succeeded,
-                            diagnostic: diagnostic, completion: completion)
-            }
+        observeEngine(process, pipe: pipe) { line in
+            self.handle(line: line, model: model)
+        } finished: { succeeded, diagnostic in
+            let saved = succeeded && FileManager.default.fileExists(atPath: output.path)
+            self.finish(output: output, succeeded: saved,
+                        diagnostic: diagnostic ?? "The upscaling engine exited before saving an image.",
+                        completion: completion)
         }
     }
 
@@ -178,6 +230,13 @@ final class UpscaleJob: ObservableObject {
                 progress = Double(done) / Double(total)
                 status = done < total ? "\(model.name) · \(done) of \(total) tiles" : "Finishing PNG…"
             }
+        } else if line.hasPrefix("Status ") {
+            status = String(line.dropFirst("Status ".count))
+        } else if model == .seedvr2 && line.contains("━━━ Phase ") {
+            if line.contains("Phase 1:") { status = "Preparing image for SeedVR2…" }
+            if line.contains("Phase 2:") { status = "Reconstructing detail with SeedVR2…" }
+            if line.contains("Phase 3:") { status = "Decoding the SeedVR2 result…" }
+            if line.contains("Phase 4:") { status = "Finishing image…" }
         } else if line.contains(" on mps") {
             status = "Upscaling with \(model.name) on Metal…"
         }
@@ -234,10 +293,14 @@ enum AppearanceChoice: String, CaseIterable, Identifiable {
 @main
 struct UpscalerApp: App {
     @AppStorage("appearance") private var appearance = AppearanceChoice.system
+    @StateObject private var job = UpscaleJob()
+    @StateObject private var library = ModelLibrary()
 
     var body: some Scene {
         Window("Mugi", id: "upscaler") {
             UpscalerView()
+                .environmentObject(job)
+                .environmentObject(library)
         }
         .defaultSize(width: 960, height: 640)
         .commands {
@@ -252,6 +315,8 @@ struct UpscalerApp: App {
         }
         Settings {
             SettingsView()
+                .environmentObject(job)
+                .environmentObject(library)
         }
     }
 }
@@ -374,6 +439,9 @@ struct SettingsView: View {
             GeneralSettings()
                 .tabItem { Label("General", systemImage: "gearshape") }
                 .tag("general")
+            ModelsSettings()
+                .tabItem { Label("Models", systemImage: "shippingbox") }
+                .tag("models")
             OutputSettings()
                 .tabItem { Label("Output", systemImage: "square.and.arrow.down") }
                 .tag("output")
@@ -408,6 +476,13 @@ private struct GeneralSettings: View {
                         Text(model.name).tag(model)
                     }
                 }
+                .pickerStyle(.segmented)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(defaultModel.description)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    ModelBars(model: defaultModel)
+                }
                 Picker("Output size", selection: $longEdge) {
                     ForEach(OutputSize.allCases) { size in
                         Text(size.name).tag(size.rawValue)
@@ -418,7 +493,7 @@ private struct GeneralSettings: View {
                         Text(size == 256 ? "\(size) px (default)" : "\(size) px").tag(size)
                     }
                 }
-                Text("Smaller tiles use less memory but take longer. Try 192 or 128 if Metal runs out of memory.")
+                Text("For DRCT-L and HAT-L, smaller tiles use less memory but take longer.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -438,6 +513,91 @@ private struct GeneralSettings: View {
                 SettingsKey.all.forEach { UserDefaults.standard.removeObject(forKey: $0) }
             }
         }
+    }
+}
+
+private struct ModelsSettings: View {
+    @EnvironmentObject private var library: ModelLibrary
+    @EnvironmentObject private var job: UpscaleJob
+    @State private var confirmRemoval = false
+
+    var body: some View {
+        Form {
+            Section("Installed models") {
+                bundledModel(.drct)
+                bundledModel(.hat)
+            }
+            Section("Optional model") {
+                LabeledContent {
+                    if library.operation == .download {
+                        SeedDownloadStatus()
+                    } else if library.operation == .delete {
+                        ProgressView().controlSize(.small)
+                    } else if !library.seedInstalled {
+                        Button(library.downloadTitle) { library.start(.download) }
+                    }
+                } label: {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("SeedVR2")
+                        Text(seedStatus).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                if library.seedHasFiles {
+                    HStack {
+                        finderButton(.seedvr2)
+                        Spacer()
+                        Button("Delete Model…", role: .destructive) { confirmRemoval = true }
+                            .disabled(library.operation != nil || job.running)
+                    }
+                }
+                if let error = library.error {
+                    Text(error).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .fixedSize(horizontal: false, vertical: true)
+        .onAppear(perform: library.refresh)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            library.refresh()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+            library.shutDown()
+        }
+        .confirmationDialog("Delete SeedVR2 model files?", isPresented: $confirmRemoval) {
+            Button("Delete Model", role: .destructive) {
+                if !job.running { library.start(.delete) }
+            }
+        } message: {
+            Text("You can download SeedVR2 again from the model chooser.")
+        }
+    }
+
+    private var seedStatus: String {
+        if library.operation == .delete { return library.status }
+        if library.operation == .download { return "Download in progress" }
+        if library.seedInstalled { return "Downloaded · About 4 GB" }
+        if library.seedHasFiles { return "Partial download · Resumable" }
+        return "Download required · About 4 GB"
+    }
+
+    private func bundledModel(_ model: UpscaleModel) -> some View {
+        let installed = library.localFiles[model]?.isEmpty == false
+        return LabeledContent {
+            finderButton(model).disabled(!installed)
+        } label: {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(model.name)
+                Text(installed ? "Included with Mugi" : "Model files missing")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func finderButton(_ model: UpscaleModel) -> some View {
+        Button("Show in Finder") { library.reveal(model) }
+            .accessibilityLabel("Show \(model.name) in Finder")
     }
 }
 
@@ -511,11 +671,13 @@ private struct OutputSettings: View {
     }
 }
 
-private struct AboutSettings: View {
-    private var version: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+private extension Bundle {
+    var mugiVersion: String {
+        object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
     }
+}
 
+private struct AboutSettings: View {
     var body: some View {
         VStack(spacing: 14) {
             Image(nsImage: NSApp.applicationIconImage)
@@ -524,7 +686,7 @@ private struct AboutSettings: View {
                 .accessibilityHidden(true)
             VStack(spacing: 2) {
                 Text("Mugi").font(.title.bold())
-                Text("Version \(version)").font(.callout).foregroundStyle(.secondary)
+                Text("Version \(Bundle.main.mugiVersion)").font(.callout).foregroundStyle(.secondary)
             }
             Text("Upscale photos to 4K privately on your Mac. Everything runs on your GPU and nothing leaves your machine.")
                 .multilineTextAlignment(.center)
@@ -547,6 +709,7 @@ private struct AboutSettings: View {
                     Link("DRCT-L", destination: URL(string: "https://huggingface.co/Phips/4xNomos2_hq_drct-l")!)
                     Link("HAT-L", destination: URL(string: "https://huggingface.co/Phips/4xNomos8kSCHAT-L")!)
                 }
+                Link("SeedVR2 (ByteDance Seed)", destination: URL(string: "https://github.com/numz/ComfyUI-SeedVR2_VideoUpscaler")!)
                 Text("The app and command line tool are under the MIT License.")
                     .foregroundStyle(.secondary)
             }
@@ -563,7 +726,7 @@ private final class UpscalerWindowState: ObservableObject {
     @Published var source: Photo?
     @Published var results: [UpscaleModel: Photo] = [:]
     @Published var model = UpscaleModel(rawValue: UserDefaults.standard.string(forKey: "defaultModel") ?? "") ?? .drct
-    @Published var comparingModels = false
+    @Published var comparison: ModelComparison?
     @Published var zoom = PreviewZoom.fit
     @Published var pan = ImageViewport.center
     @Published var errorMessage: String?
@@ -576,14 +739,20 @@ private final class UpscalerWindowState: ObservableObject {
     }
 }
 
-private enum PreviewZoom: Hashable {
-    case fit, actualPixels
+private struct EnlargedPreview: Identifiable {
+    let label: String
+    let photo: Photo
+
+    var id: URL { photo.url }
 }
 
 struct UpscalerView: View {
     private static let formats: [UTType] = [.png, .jpeg, .webP, .tiff]
-    @StateObject private var job = UpscaleJob()
+    private static let previewPadding: CGFloat = 20
+    @EnvironmentObject private var job: UpscaleJob
+    @EnvironmentObject private var library: ModelLibrary
     @StateObject private var window = UpscalerWindowState()
+    @State private var enlargedPreview: EnlargedPreview?
     @Environment(\.displayScale) private var displayScale
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("appearance") private var appearance = AppearanceChoice.system
@@ -599,7 +768,7 @@ struct UpscalerView: View {
     var body: some View {
         VStack(spacing: 10) {
             comparisonWorkspace
-                .padding(20)
+                .padding(Self.previewPadding)
                 .background(Color(nsColor: .windowBackgroundColor),
                             in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .shadow(color: .black.opacity(0.14), radius: 10, y: 3)
@@ -611,16 +780,28 @@ struct UpscalerView: View {
         .background { FrostedBackground().ignoresSafeArea() }
         .background(WindowChrome())
         .toolbarBackground(.hidden, for: .windowToolbar)
+        .toolbar(removing: defaultToolbarTitle)
         .frame(minWidth: 690, minHeight: 440)
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
             job.shutDown()
+            library.shutDown()
+        }
+        .onAppear(perform: library.refresh)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            library.refresh()
         }
         .onOpenURL { select($0) }
         .onChange(of: appearance, initial: true) { _, choice in
             NSApp.appearance = choice.appearance
         }
         .toolbar {
-            TitleIconItem()
+            TitleItem()
+
+            #if compiler(>=6.2)
+            if #available(macOS 26, *) {
+                ToolbarSpacer(.flexible, placement: .primaryAction)
+            }
+            #endif
 
             ToolbarItem(placement: .primaryAction) {
                 Button(action: choose) {
@@ -668,29 +849,68 @@ struct UpscalerView: View {
         } message: {
             Text(window.errorMessage ?? "")
         }
+        .sheet(item: $enlargedPreview) { preview in
+            VStack(spacing: 12) {
+                HStack {
+                    Text(preview.label).font(.headline)
+                    Text(preview.photo.dimensions)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Done") { enlargedPreview = nil }
+                        .keyboardShortcut(.cancelAction)
+                }
+                Image(nsImage: preview.photo.preview)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .accessibilityLabel("\(preview.label) image")
+            }
+            .padding(Self.previewPadding)
+            .frame(width: 820, height: 540)
+        }
+    }
+
+    private var defaultToolbarTitle: ToolbarDefaultItemKind? {
+        if #available(macOS 15, *) { .title } else { nil }
     }
 
     private var motion: Animation? { reduceMotion ? nil : .smooth(duration: 0.3) }
 
     private var controlBar: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 16) {
-                Picker("Model", selection: $window.model) {
-                    ForEach(UpscaleModel.allCases) { model in
-                        Text(model.name).tag(model)
-                    }
+        VStack(alignment: .leading, spacing: 8) {
+            Picker("Model", selection: $window.model) {
+                ForEach(UpscaleModel.allCases) { model in
+                    Text(model.name).tag(model)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
-                .disabled(job.running)
-                Text(window.model.description)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .contentTransition(.opacity)
-                    .animation(motion, value: window.model)
-                Spacer()
-                actionButtons
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .disabled(job.running)
+            Text(window.model.description)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .contentTransition(.opacity)
+                .animation(motion, value: window.model)
+            HStack(spacing: 12) {
+                ModelBars(model: window.model)
+                if window.model == .seedvr2 && !library.seedInstalled && library.operation == nil {
+                    Spacer(minLength: 4)
+                    Button(library.downloadTitle) { library.start(.download) }
+                        .controlSize(.regular)
+                        .actionButton(prominent: true)
+                        .fixedSize()
+                    Text("First use downloads about 4 GB.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            if let error = library.error, window.model == .seedvr2 {
+                Text(error).font(.caption).foregroundStyle(.secondary)
             }
             ZStack {
                 if job.running {
@@ -717,40 +937,53 @@ struct UpscalerView: View {
 
     private var actionButtons: some View {
         let selectedDone = window.results[window.model] != nil
+        let saveLabel = Label("Save \(outputFormat.name)…", systemImage: "square.and.arrow.down")
         return GlassGroup {
             HStack(spacing: 12) {
                 if job.running {
-                    Button("Cancel", action: job.cancel)
-                        .keyboardShortcut(.cancelAction)
-                        .disabled(job.cancelling)
-                        .actionButton(prominent: false)
-                        .transition(.blurReplace)
+                    Button(action: job.cancel) {
+                        Label("Cancel", systemImage: "xmark")
+                    }
+                    .keyboardShortcut(.cancelAction)
+                    .disabled(job.cancelling)
+                    .actionButton(prominent: false)
+                    .transition(.blurReplace)
                 } else {
-                    Button("Upscale") { render([window.model]) }
-                        .keyboardShortcut(.return, modifiers: .command)
-                        .help("Upscale with \(window.model.name) (⌘↩)")
-                        .disabled(window.source == nil)
-                        .actionButton(prominent: !selectedDone)
-                        .transition(.blurReplace)
+                    Button { render([window.model]) } label: {
+                        Label("Upscale", systemImage: "arrow.up.left.and.arrow.down.right")
+                    }
+                    .keyboardShortcut(.return, modifiers: .command)
+                    .help("Upscale with \(window.model.name) (⌘↩)")
+                    .disabled(window.source == nil || (window.model == .seedvr2 && !library.canUseSeed))
+                    .actionButton(prominent: !selectedDone)
+                    .transition(.blurReplace)
                 }
-                if window.comparingModels {
-                    Menu("Save \(outputFormat.name)…") {
-                        ForEach(UpscaleModel.allCases) { model in
+                if let comparison = window.comparison {
+                    Menu {
+                        ForEach(comparison.models) { model in
                             Button("Save \(model.name)…") { save(model: model) }
                         }
+                    } label: {
+                        saveLabel
                     }
                     .fixedSize()
                     .disabled(job.running)
                     .actionButton(prominent: selectedDone)
                 } else {
-                    Button("Save \(outputFormat.name)…") {
+                    Button {
                         if let model = window.displayedModel { save(model: model) }
+                    } label: {
+                        saveLabel
                     }
                     .keyboardShortcut("s")
                     .disabled(window.displayedModel == nil || job.running)
                     .actionButton(prominent: selectedDone)
                 }
             }
+            .labelStyle(.titleAndIcon)
+            .font(.body.weight(.semibold))
+            .controlSize(.extraLarge)
+            .buttonBorderShape(.capsule)
         }
         .animation(motion, value: job.running)
     }
@@ -788,86 +1021,126 @@ struct UpscalerView: View {
             } else if let duration = job.finishedElapsed {
                 elapsedLabel(duration)
             }
+            if library.operation == .download {
+                SeedDownloadStatus(showsModelName: true)
+            } else if window.model == .seedvr2 {
+                if library.operation == .delete {
+                    Text(library.status)
+                } else if library.seedInstalled {
+                    Label("SeedVR2 downloaded", systemImage: "checkmark.circle")
+                } else {
+                    Text(library.seedHasFiles ? "Download incomplete" : "SeedVR2 download required")
+                }
+            }
         }
         .font(.caption)
         .foregroundStyle(.secondary)
         .monospacedDigit()
+        .frame(minHeight: 20)
         .animation(motion, value: window.activity)
         .animation(motion, value: job.progress)
     }
 
     private var comparisonWorkspace: some View {
-        let result = window.displayedModel.flatMap { window.results[$0] }
+        let leftModel = window.comparison?.left
+        let rightModel = window.comparison?.right ?? window.displayedModel
+        let result = rightModel.flatMap { window.results[$0] }
         let reference = result?.pixelSize ?? window.source?.pixelSize
-        let rightModel = window.comparingModels ? UpscaleModel.hat : window.displayedModel
-        let spacing: CGFloat = 20
 
         return VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Picker("Zoom", selection: $window.zoom) {
                     Text("Fit").tag(PreviewZoom.fit)
+                    Text("Contain").tag(PreviewZoom.contain)
                     Text("1:1").tag(PreviewZoom.actualPixels)
                 }
                 .pickerStyle(.segmented)
                 .fixedSize()
                 .disabled(window.source == nil)
-                .help("At 1:1, drag either image to pan. Both views stay aligned.")
+                .help("Fit scales the whole image to the pane. Contain caps the scale at 1:1. At 1:1, drag either image to pan both.")
                 Spacer()
-                Button(window.comparingModels ? "Show Original" : "Compare Models", action: toggleComparison)
-                    .controlSize(.regular)
-                    .disabled(window.source == nil || job.running)
-                    .help(window.comparingModels
-                          ? "View the original alongside the selected model output."
-                          : "Render any missing model outputs and compare them side by side.")
-                    .actionButton(prominent: false)
-            }
-            GeometryReader { geometry in
-                let paneWidth = max(0, (geometry.size.width - spacing) / 2)
-                HStack(alignment: .top, spacing: spacing) {
-                    preview(label: window.comparingModels ? UpscaleModel.drct.name : "Original",
-                            photo: window.comparingModels ? window.results[.drct] : window.source,
-                            reference: reference) {
-                        VStack(spacing: 12) {
-                            Image(nsImage: NSApp.applicationIconImage)
-                                .resizable()
-                                .frame(width: 88, height: 88)
-                                .scaleEffect(window.dragging ? 1.12 : 1)
-                                .animation(reduceMotion ? nil : .spring(duration: 0.35, bounce: 0.4), value: window.dragging)
-                                .accessibilityHidden(true)
-                            Text(window.dragging ? "Release to open" : "Drop an image here").font(.headline)
-                            Button("Choose Image…", action: choose)
-                                .actionButton(prominent: false)
-                        }
-                    }
-                    .frame(width: paneWidth)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [6]))
-                            .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                            .opacity(window.dragging ? 1 : 0)
-                            .animation(motion, value: window.dragging)
-                            .allowsHitTesting(false)
-                    }
-                    .dropDestination(for: URL.self) { urls, _ in
-                        guard let url = urls.first, urls.count == 1, !job.running else { return false }
-                        select(url)
-                        return true
-                    } isTargeted: { targeted in
-                        window.dragging = targeted && !job.running
-                    }
-
-                    preview(label: rightModel?.name ?? "Upscaled",
-                            photo: rightModel.flatMap { window.results[$0] },
-                            reference: reference) {
-                        VStack(spacing: 10) {
-                            Image(systemName: "sparkles").font(.system(size: 30, weight: .light))
-                            Text("Your 4K preview will appear here").font(.headline)
-                        }
-                    }
-                    .frame(width: paneWidth)
+                if window.comparison != nil {
+                    Button("Show Original") { window.comparison = nil }
+                        .disabled(job.running)
+                        .actionButton(prominent: false)
                 }
-                .animation(motion, value: window.comparingModels)
+                Menu("Compare Models") {
+                    ForEach(ModelComparison.options, id: \.title) { comparison in
+                        Button(comparison.title) { compare(comparison) }
+                    }
+                }
+                .controlSize(.regular)
+                .disabled(window.source == nil || job.running)
+                .help("Choose two models to render and compare side by side.")
+                .actionButton(prominent: false)
             }
+            VStack(spacing: 0) {
+                previewPanes(leftModel: leftModel, rightModel: rightModel, reference: reference)
+                ZStack(alignment: .topLeading) {
+                    Color.clear
+                    if leftModel == nil, let source = window.source {
+                        Text(source.url.lastPathComponent)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .padding(.top, 3)
+                    }
+                }
+                .frame(height: Self.previewPadding)
+                actionButtons.frame(maxWidth: .infinity, alignment: .trailing)
+            }
+        }
+    }
+
+    private func previewPanes(leftModel: UpscaleModel?, rightModel: UpscaleModel?, reference: CGSize?) -> some View {
+        let spacing: CGFloat = 20
+        return GeometryReader { geometry in
+            let paneWidth = max(0, (geometry.size.width - spacing) / 2)
+            HStack(alignment: .top, spacing: spacing) {
+                preview(label: leftModel?.name ?? "Original",
+                        photo: leftModel.flatMap { window.results[$0] } ?? window.source,
+                        reference: reference) {
+                    VStack(spacing: 12) {
+                        Image(nsImage: NSApp.applicationIconImage)
+                            .resizable()
+                            .frame(width: 88, height: 88)
+                            .scaleEffect(window.dragging ? 1.12 : 1)
+                            .animation(reduceMotion ? nil : .spring(duration: 0.35, bounce: 0.4), value: window.dragging)
+                            .accessibilityHidden(true)
+                        Text(window.dragging ? "Release to open" : "Drop an image here").font(.headline)
+                        Button("Choose Image…", action: choose)
+                            .actionButton(prominent: false)
+                    }
+                }
+                .frame(width: paneWidth)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [6]))
+                        .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .opacity(window.dragging ? 1 : 0)
+                        .animation(motion, value: window.dragging)
+                        .allowsHitTesting(false)
+                }
+                .dropDestination(for: URL.self) { urls, _ in
+                    guard let url = urls.first, urls.count == 1, !job.running else { return false }
+                    select(url)
+                    return true
+                } isTargeted: { targeted in
+                    window.dragging = targeted && !job.running
+                }
+
+                preview(label: rightModel?.name ?? "Upscaled",
+                        photo: rightModel.flatMap { window.results[$0] },
+                        reference: reference) {
+                    VStack(spacing: 10) {
+                        Image(systemName: "sparkles").font(.system(size: 30, weight: .light))
+                        Text("Your 4K preview will appear here").font(.headline)
+                    }
+                }
+                .frame(width: paneWidth)
+            }
+            .animation(motion, value: leftModel)
         }
     }
 
@@ -895,8 +1168,19 @@ struct UpscalerView: View {
                         .background(.quaternary, in: Capsule())
                         .contentTransition(.numericText())
                         .transition(.opacity)
+                    Button {
+                        enlargedPreview = EnlargedPreview(label: label, photo: photo)
+                    } label: {
+                        Image(systemName: "arrow.up.right.square")
+                            .frame(width: 22, height: 20)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Open \(label) at a larger size")
+                    .accessibilityLabel("Open \(label) preview")
                 }
             }
+            .frame(minHeight: 20)
             .animation(motion, value: photo?.url)
             ZStack {
                 RoundedRectangle(cornerRadius: 16, style: .continuous).fill(.quaternary)
@@ -919,17 +1203,12 @@ struct UpscalerView: View {
                     .strokeBorder(.separator)
                     .allowsHitTesting(false)
             }
-            Text(photo.map { label == "Original" ? $0.url.lastPathComponent : outputFormat.name } ?? " ")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
         }
     }
 
     private func previewImage(_ photo: Photo, label: String, reference: CGSize, size: CGSize) -> some View {
         let actualPixels = window.zoom == .actualPixels
-        let viewport = ImageViewport(size: size, pixels: reference, displayScale: displayScale, actualPixels: actualPixels)
+        let viewport = ImageViewport(size: size, pixels: reference, displayScale: displayScale, zoom: window.zoom)
         let focus = viewport.panned(from: window.pan, by: dragTranslation)
         return Image(nsImage: photo.preview)
             .resizable()
@@ -965,7 +1244,7 @@ struct UpscalerView: View {
             }
             window.source = try Photo(url: url)
             window.results = [:]
-            window.comparingModels = false
+            window.comparison = nil
             window.zoom = .fit
             window.pan = ImageViewport.center
             window.activity = nil
@@ -975,21 +1254,25 @@ struct UpscalerView: View {
         }
     }
 
-    private func toggleComparison() {
-        if window.comparingModels {
-            window.comparingModels = false
-            return
-        }
-        let missing = UpscaleModel.allCases.filter { window.results[$0] == nil }
-        render(missing[...], compareWhenReady: true)
+    private func compare(_ comparison: ModelComparison) {
+        let missing = comparison.models.filter { window.results[$0] == nil }
+        render(missing[...], comparison: comparison)
     }
 
-    private func render(_ models: ArraySlice<UpscaleModel>, compareWhenReady: Bool = false,
+    private func render(_ models: ArraySlice<UpscaleModel>, comparison: ModelComparison? = nil,
                         startedAt: ContinuousClock.Instant = .now) {
         guard let source = window.source, !job.running else { return }
         guard let model = models.first else {
-            window.comparingModels = compareWhenReady
+            window.comparison = comparison
             return
+        }
+        if models.contains(.seedvr2) {
+            library.refresh()
+            guard library.canUseSeed else {
+                window.model = .seedvr2
+                window.activity = "Download SeedVR2 before upscaling with it."
+                return
+            }
         }
         window.activity = nil
         do {
@@ -1010,9 +1293,9 @@ struct UpscalerView: View {
                     }
                     let saved = autoSaveResult(model: model)
                     if models.count > 1 {
-                        render(models.dropFirst(), compareWhenReady: compareWhenReady, startedAt: startedAt)
+                        render(models.dropFirst(), comparison: comparison, startedAt: startedAt)
                     } else {
-                        if compareWhenReady { window.comparingModels = true }
+                        if let comparison { window.comparison = comparison }
                         if !saved { window.activity = "Ready to save" }
                         if haptics {
                             NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
@@ -1169,31 +1452,40 @@ private struct WindowChrome: NSViewRepresentable {
             window.isOpaque = false
             window.backgroundColor = .clear
             window.titlebarAppearsTransparent = true
+            window.titleVisibility = .hidden
         }
     }
 }
 
 
-/// The app icon shown to the left of the window title, without a glass pill around it.
-private struct TitleIconItem: ToolbarContent {
-    private var icon: some View {
-        Image(nsImage: NSApp.applicationIconImage)
-            .resizable()
-            .frame(width: 24, height: 24)
-            .accessibilityHidden(true)
+/// The compact title at the leading edge of the toolbar.
+private struct TitleItem: ToolbarContent {
+    private var title: some View {
+        HStack(spacing: 6) {
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .frame(width: 24, height: 24)
+                .accessibilityHidden(true)
+            Text("Mugi").font(.headline)
+            Text("v\(Bundle.main.mugiVersion)")
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("Version \(Bundle.main.mugiVersion)")
+        }
+        .fixedSize()
     }
 
     @ToolbarContentBuilder
     var body: some ToolbarContent {
         #if compiler(>=6.2)
         if #available(macOS 26, *) {
-            ToolbarItem(placement: .navigation) { icon }
+            ToolbarItem(placement: .navigation) { title }
                 .sharedBackgroundVisibility(.hidden)
         } else {
-            ToolbarItem(placement: .navigation) { icon }
+            ToolbarItem(placement: .navigation) { title }
         }
         #else
-        ToolbarItem(placement: .navigation) { icon }
+        ToolbarItem(placement: .navigation) { title }
         #endif
     }
 }

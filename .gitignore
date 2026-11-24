@@ -4,6 +4,7 @@ __pycache__/
 .env
 .env.*
 /models/
+/seedvr2-runtime/
 /input/
 /output/
 /demo/

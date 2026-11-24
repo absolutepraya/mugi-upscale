@@ -17,13 +17,13 @@ Upscale photos to 4K on your Mac. Everything runs locally on the GPU, so your ph
 
 </div>
 
-Mugi is a native SwiftUI app and a command line tool for enlarging photos with the DRCT-L and HAT-L super-resolution models. It runs [Spandrel](https://github.com/chaiNNer-org/spandrel) and PyTorch on Apple Silicon through Metal. After setup, nothing needs the network.
+Mugi is a native SwiftUI app and a command line tool for enlarging images with DRCT-L, HAT-L, or SeedVR2. All three run on Apple Silicon through Metal. Processing stays offline after the selected model's weights are available.
 
 ## Features
 
-- **Private and offline.** Models and Python are local, and the DMG bundles both.
-- **Two models.** DRCT-L for clean photographs and HAT-L for compressed or soft ones.
-- **Compare models.** View both results side by side before you save one.
+- **Local processing.** The DMG bundles Python and the DRCT-L and HAT-L weights. Select SeedVR2 and click **Download** to get its weights (about 4 GB).
+- **Three models.** DRCT-L for clean images, HAT-L for compressed or soft images, and SeedVR2 for rebuilding textures in AI images.
+- **Compare models.** Choose any two models and view their results side by side before you save one.
 - **Inspect at 1:1.** Pan and zoom both panes together to check fine detail.
 - **Your format.** Exports 8-bit sRGB PNG by default, or JPEG, TIFF, or HEIC, with ICC profiles and EXIF orientation handled for you.
 - **Auto-save.** Optionally save every result to a folder you choose as soon as it is ready.
@@ -53,7 +53,7 @@ cd mugi-upscale
 open build/Mugi.app
 ```
 
-Setup creates a local Python environment and downloads and verifies both model files (about 390 MiB in total).
+Setup creates a local Python environment, downloads the SeedVR2 runtime source, and verifies the DRCT-L and HAT-L weights (about 390 MiB in total).
 
 > [!NOTE]
 > Keep the built app in the repository's `build/` directory so it can find the environment and model weights. Rebuild with `./build-app.sh` after editing the Swift source.
@@ -61,19 +61,20 @@ Setup creates a local Python environment and downloads and verifies both model f
 ## Use the app
 
 1. Click **Add Photo** (⌘O) or drop a photo onto the window.
-2. Select a model.
-3. Click **Upscale**. The bar shows completed tiles, and the timer includes model loading and PNG preparation.
+2. Select a model. The bars describe typical detail reconstruction and relative processing time. If SeedVR2 is missing, click **Download** next to its bars. The status row shows download speed and progress, and you can pause and resume.
+3. Click **Upscale**. The timer includes model loading and PNG preparation. SeedVR2 shows its processing stage and may take several minutes.
 4. When the second preview appears, click **Save…**, or turn on auto-save in Settings.
 
-The icon buttons at the top right switch between System, Light, and Dark appearance and open **Settings** (⌘,). Settings has three tabs:
+The icon buttons at the top right switch between System, Light, and Dark appearance and open **Settings** (⌘,).
 
 - **General:** appearance, default model, output size (3,840, 4,096, or 7,680 px on the long edge), tile size, and haptic feedback.
+- **Models:** check model availability, reveal model files in Finder, and download or delete SeedVR2. DRCT-L and HAT-L are included with Mugi.
 - **Output:** auto-save, the default output folder, and the image format, with a quality slider for JPEG and HEIC.
 - **About:** credits, source code, and model licenses.
 
-Use **1:1** to inspect the output at one image pixel per display pixel. Drag either pane to pan both together. The original scales to the same framing as the output. **Fit** returns to the whole image.
+Use **1:1** to inspect the output at one image pixel per display pixel. Drag either pane to pan both together. The original scales to the same framing as the output. **Fit** shows the whole image, and **Contain** shows the whole image at up to 1:1.
 
-Click **Compare Models** to view DRCT-L and HAT-L side by side. Mugi runs any missing model first and keeps both results for the current photo. Use **Show Original** to switch back, or **Save…** to choose which output to export.
+Click **Compare Models** and choose a pair. Mugi runs any missing model first and keeps the results for the current image. Use **Show Original** to switch back, or **Save…** to choose which output to export.
 
 ## Command line
 
@@ -86,25 +87,28 @@ uv run --locked upscale.py "/path/to/landscape.png" -o output/landscape-4k.png
 # A whole folder
 uv run --locked upscale.py input -o output
 
-# The second model
+# A soft or compressed photo
 uv run --locked upscale.py "/path/to/landscape.png" --model hat -o output/landscape-hat-4k.png
+
+# A generated image
+uv run --locked upscale.py "/path/to/generated.png" --model seedvr2 -o output/generated-seedvr2-4k.png
 ```
 
 | Option | Default | What it does |
 |---|---|---|
-| `--model` | `drct` | `drct` for clean photographs, `hat` for photos with JPEG compression and blur |
+| `--model` | `drct` | `drct` for clean images, `hat` for compression and blur, or `seedvr2` to reconstruct textures |
 | `--long-edge` | `3840` | Target size of the long edge in pixels. A 16:9 input becomes 3840 × 2160. Use `4096` for a 4,096-pixel long edge |
-| `--tile` | `256` | Input tile size: `128`, `192`, `256`, `320`, or `384`. Use `192` or `128` if Metal runs out of memory |
-| `--device` | `mps` | `mps` runs on the GPU through Metal. Use `cpu` if Metal is unavailable |
+| `--tile` | `256` | DRCT-L and HAT-L input tile size: `128`, `192`, `256`, `320`, or `384`. Use `192` or `128` if Metal runs out of memory |
+| `--device` | `mps` | `mps` runs on the GPU through Metal. DRCT-L and HAT-L also support `cpu` |
 
-Other aspect ratios keep their framing. The CLI refuses to overwrite an existing output path, so use a new filename or directory to rerun. Use `uv run --locked --offline` to run without network access after setup.
+Other aspect ratios keep their framing. The CLI refuses to overwrite an existing output path, so use a new filename or directory to rerun.
 
 > [!TIP]
-> Both models estimate detail rather than recover it. Compare foliage, fog, fine edges, and repeating textures at 100% zoom to choose the better fit for a photo.
+> Compare foliage, fog, fine edges, and repeating textures at 100% zoom. SeedVR2 can introduce new detail and change the color or shape of fine features.
 
 ## How it works
 
-Mugi runs the model in full precision on overlapping tiles and crossfades the seams. Images that already meet the requested size are passed through, or downsampled to fit. Smaller inputs get a native 4× model pass followed by a Lanczos resize to the requested dimensions. If the input is under 960 pixels on its long edge, that final resize enlarges beyond the native 4× result.
+DRCT-L and HAT-L use [Spandrel](https://github.com/chaiNNer-org/spandrel) and run a native 4× pass on overlapping tiles. SeedVR2 runs a diffusion pass at a working resolution based on the requested size, aspect ratio, and unified memory. The working resolution is capped at about 4K on a Mac with 24 GB of memory and lower on Macs with less memory. Mugi uses Lanczos to reach the requested dimensions, including 8K. If the source already meets the model's working size, Mugi resizes it directly.
 
 Run one job at a time so the GPU has room for the tiles.
 
@@ -114,6 +118,8 @@ Setup downloads these weights from Philip Hofmann's model repositories under [CC
 
 - DRCT-L: [4xNomos2_hq_drct-l](https://huggingface.co/Phips/4xNomos2_hq_drct-l)
 - HAT-L: [4xNomos8kSCHAT-L](https://huggingface.co/Phips/4xNomos8kSCHAT-L)
+
+SeedVR2 uses the [upstream CLI integration](https://github.com/numz/ComfyUI-SeedVR2_VideoUpscaler/tree/4490bd1f482e026674543386bb2a4d176da245b9) and the 3B Q8 model. Its weights are verified on download and cached in `~/Library/Caches/dev.abhipraya.local-upscaler/SeedVR2`.
 
 The application and CLI source are under the [MIT License](LICENSE).
 
@@ -125,6 +131,6 @@ On an Apple Silicon Mac with `uv` and the Apple developer tools:
 ./packaging/build-dmg.sh 0.1.0
 ```
 
-The DMG appears under `build/dist/`. It contains the app, Python, its locked dependencies, and both verified model files, so an installed copy runs offline.
+The DMG appears under `build/dist/`. It contains the app, Python, its locked dependencies, and the DRCT-L and HAT-L weights. Use **Download** in the app to install SeedVR2.
 
 The [CI workflow](.github/workflows/ci.yml) checks and builds the app on pull requests and pushes to `main`. To publish a release, start the [macOS Release workflow](.github/workflows/macos-release.yml) from `main` with a new version such as `0.1.0`. It builds the DMG and publishes it to GitHub Releases with a SHA-256 checksum and the install instructions.

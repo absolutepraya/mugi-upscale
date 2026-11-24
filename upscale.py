@@ -1,9 +1,10 @@
-"""Upscale photos locally with a Nomos 4× model and save lossless PNGs."""
+"""Upscale images locally and save lossless PNGs."""
 
 import argparse
 from io import BytesIO
 import os
 from pathlib import Path
+import sys
 from tempfile import NamedTemporaryFile
 
 from PIL import Image, ImageCms, ImageOps
@@ -11,7 +12,8 @@ import spandrel
 import torch
 
 
-MODEL_DIR = Path(__file__).resolve().parent / "models"
+ENGINE_DIR = Path(__file__).resolve().parent
+MODEL_DIR = ENGINE_DIR / "models"
 MODELS = {
     "drct": MODEL_DIR / "4xNomos2_hq_drct-l.safetensors",
     "hat": MODEL_DIR / "4xNomos8kSCHAT-L.safetensors",
@@ -108,12 +110,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", type=Path, help="Image file or folder of images")
     parser.add_argument("-o", "--output", type=Path, help="PNG path for a file, output folder for a batch")
-    parser.add_argument("--model", choices=MODELS, default="drct")
+    parser.add_argument("--model", choices=(*MODELS, "seedvr2"), default="drct")
+    parser.add_argument("--require-local-model", action="store_true", help="Use installed SeedVR2 weights only")
     parser.add_argument("--long-edge", type=int, default=3840, help="Target long edge in pixels (default: 3840)")
     parser.add_argument("--tile", type=int, choices=(128, 192, 256, 320, 384), default=256,
                         help="Input tile size (default: 256, use 192 or 128 if memory is tight)")
     parser.add_argument("--device", choices=("mps", "cpu"), default="mps")
     args = parser.parse_args()
+    if args.model == "seedvr2" and args.device != "mps":
+        parser.error("SeedVR2 requires Apple Silicon with Metal. For CPU use DRCT-L or HAT-L.")
     if args.long_edge < 1:
         parser.error("--long-edge must be positive")
     if args.input.is_dir():
@@ -145,7 +150,17 @@ def main():
             longest = max(image.size)
             size = tuple(max(1, round(side * args.long_edge / longest)) for side in image.size)
             print(f"{source.name}: {image.width}×{image.height} to {size[0]}×{size[1]}", flush=True)
-            if longest < args.long_edge:
+            if longest < args.long_edge and args.model == "seedvr2":
+                if model is None:
+                    if not torch.backends.mps.is_available():
+                        raise ValueError("SeedVR2 requires Apple Silicon with Metal.")
+                    # The packaged Python runs in isolated mode and omits the script directory.
+                    sys.path.insert(0, str(ENGINE_DIR))
+                    from seedvr2 import SeedVR2
+
+                    model = SeedVR2(allow_download=not args.require_local_model)
+                image = model.upscale(image, args.long_edge)
+            elif longest < args.long_edge:
                 if model is None:
                     if args.device == "mps" and not torch.backends.mps.is_available():
                         raise ValueError("Metal unavailable. Use --device cpu to run on the CPU.")

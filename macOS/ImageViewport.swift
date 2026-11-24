@@ -1,24 +1,34 @@
 import CoreGraphics
 
+enum PreviewZoom: Hashable {
+    case fit, contain, actualPixels
+}
+
 struct ImageViewport {
     static let center = CGPoint(x: 0.5, y: 0.5)
 
     let size: CGSize
     let imageSize: CGSize
     let displayScale: CGFloat
-    let actualPixels: Bool
+    let zoom: PreviewZoom
 
-    init(size: CGSize, pixels: CGSize, displayScale: CGFloat, actualPixels: Bool) {
+    init(size: CGSize, pixels: CGSize, displayScale: CGFloat, zoom: PreviewZoom) {
         self.size = size
         self.displayScale = displayScale
-        self.actualPixels = actualPixels
+        self.zoom = zoom
 
-        let scale = actualPixels ? 1 / displayScale : min(size.width / pixels.width, size.height / pixels.height)
+        let fitScale = min(size.width / pixels.width, size.height / pixels.height)
+        let nativeScale = 1 / displayScale
+        let scale = switch zoom {
+        case .fit: fitScale
+        case .contain: min(fitScale, nativeScale)
+        case .actualPixels: nativeScale
+        }
         imageSize = CGSize(width: pixels.width * scale, height: pixels.height * scale)
     }
 
     var canPan: Bool {
-        actualPixels && (imageSize.width > size.width || imageSize.height > size.height)
+        zoom == .actualPixels && (imageSize.width > size.width || imageSize.height > size.height)
     }
 
     func panned(from center: CGPoint, by translation: CGSize) -> CGPoint {
@@ -45,6 +55,6 @@ struct ImageViewport {
     }
 
     private func snap(_ point: CGFloat) -> CGFloat {
-        actualPixels ? (point * displayScale).rounded() / displayScale : point
+        zoom == .actualPixels ? (point * displayScale).rounded() / displayScale : point
     }
 }
