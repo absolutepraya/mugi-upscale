@@ -1,4 +1,6 @@
-# 4K Upscaler
+# Mugi
+
+<img src="macOS/icon/mugi-1024.png" width="128" alt="Mugi">
 
 Upscale photos locally on an Apple Silicon Mac. The app uses a native
 SwiftUI interface and runs Spandrel and PyTorch on the GPU through Metal.
@@ -12,11 +14,11 @@ macOS SDK from Xcode or Apple's Command Line Tools, and
 If the Apple tools are missing, run `xcode-select --install`.
 
 ```sh
-git clone https://github.com/absolutepraya/4k-upscaling.git
-cd 4k-upscaling
+git clone https://github.com/absolutepraya/mugi.git
+cd mugi
 ./setup.sh
 ./build-app.sh
-open "build/4K Upscaler.app"
+open "build/Mugi.app"
 ```
 
 Setup creates a local Python environment and downloads and verifies both
@@ -43,7 +45,7 @@ Rebuild with `./build-app.sh` after editing the Swift source.
 
 ## Install from a DMG
 
-Download the current DMG from [GitHub Releases](https://github.com/absolutepraya/4k-upscaling/releases)
+Download the current DMG from [GitHub Releases](https://github.com/absolutepraya/mugi/releases)
 with an account that has access to the repository. Follow the
 [installation guide](packaging/INSTALL.md), also included in the disk image.
 

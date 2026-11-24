@@ -23,4 +23,4 @@ jobs:
           bash -n packaging/build-dmg.sh
           python3 -m py_compile upscale.py
           ./build-app.sh
-          codesign --verify --strict 'build/4K Upscaler.app'
+          codesign --verify --strict 'build/Mugi.app'
