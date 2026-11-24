@@ -715,9 +715,17 @@ private struct GlassGroup<Content: View>: View {
 }
 
 
-/// The frosted window frame: blurs whatever is behind the window.
+/// The glass window frame: Liquid Glass on macOS 26 and later, a behind-window blur before that.
 private struct FrostedBackground: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSVisualEffectView {
+    func makeNSView(context: Context) -> NSView {
+        #if compiler(>=6.2)
+        if #available(macOS 26, *) {
+            let view = NSGlassEffectView()
+            view.style = .regular
+            view.cornerRadius = 0
+            return view
+        }
+        #endif
         let view = NSVisualEffectView()
         view.material = .underWindowBackground
         view.blendingMode = .behindWindow
@@ -725,7 +733,7 @@ private struct FrostedBackground: NSViewRepresentable {
         return view
     }
 
-    func updateNSView(_ view: NSVisualEffectView, context: Context) {}
+    func updateNSView(_ view: NSView, context: Context) {}
 }
 
 /// Makes the window itself see-through so the frosted frame shows, and blends in the title bar.
