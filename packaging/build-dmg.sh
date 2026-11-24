@@ -28,8 +28,10 @@ runtime="$engine/python"
 
 ./build-app.sh "$app"
 ./setup.sh --models-only
+./setup.sh --seedvr2-source
 mkdir -p "$engine/models" "$runtime"
-cp upscale.py "$engine/"
+cp upscale.py seedvr2.py seedvr2-model.json "$engine/"
+cp -R seedvr2-runtime "$engine/"
 cp README.md LICENSE "$app/Contents/Resources/"
 cp models/4xNomos2_hq_drct-l.safetensors models/4xNomos8kSCHAT-L.safetensors "$engine/models/"
 
@@ -41,6 +43,7 @@ uv export --locked --no-emit-project --no-dev --no-header > "$work/requirements.
 uv pip install --no-deps --require-hashes --link-mode copy --python "$python" \
     --target "$runtime/lib/python3.12/site-packages" -r "$work/requirements.txt"
 "$python" -I -B "$engine/upscale.py" --help > /dev/null
+"$python" -I -B "$engine/seedvr2.py" check > /dev/null
 
 plist="$app/Contents/Info.plist"
 plutil -replace CFBundleShortVersionString -string "$version" "$plist"

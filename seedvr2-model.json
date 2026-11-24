@@ -1,0 +1,14 @@
+[
+  {
+    "name": "seedvr2_ema_3b-Q8_0.gguf",
+    "repo": "AInVFX/SeedVR2_comfyUI",
+    "bytes": 3660613984,
+    "sha256": "be0d60083a2051a265eb4b77f28edf494e6db67ffc250216f32b72292e5cbd96"
+  },
+  {
+    "name": "ema_vae_fp16.safetensors",
+    "repo": "numz/SeedVR2_comfyUI",
+    "bytes": 501324814,
+    "sha256": "20678548f420d98d26f11442d3528f8b8c94e57ee046ef93dbb7633da8612ca1"
+  }
+]
