@@ -203,13 +203,52 @@ final class UpscaleJob: ObservableObject {
     }
 }
 
+enum AppearanceChoice: String, CaseIterable, Identifiable {
+    case system, light, dark
+
+    var id: Self { self }
+    var name: String {
+        switch self {
+        case .system: "System"
+        case .light: "Light"
+        case .dark: "Dark"
+        }
+    }
+    var symbol: String {
+        switch self {
+        case .system: "circle.lefthalf.filled"
+        case .light: "sun.max"
+        case .dark: "moon"
+        }
+    }
+    var appearance: NSAppearance? {
+        switch self {
+        case .system: nil
+        case .light: NSAppearance(named: .aqua)
+        case .dark: NSAppearance(named: .darkAqua)
+        }
+    }
+}
+
 @main
 struct UpscalerApp: App {
+    @AppStorage("appearance") private var appearance = AppearanceChoice.system
+
     var body: some Scene {
         Window("Mugi", id: "upscaler") {
             UpscalerView()
         }
         .defaultSize(width: 960, height: 640)
+        .commands {
+            CommandGroup(after: .toolbar) {
+                Picker("Appearance", selection: $appearance) {
+                    ForEach(AppearanceChoice.allCases) { choice in
+                        Label(choice.name, systemImage: choice.symbol).tag(choice)
+                    }
+                }
+                .pickerStyle(.inline)
+            }
+        }
     }
 }
 
@@ -241,6 +280,7 @@ struct UpscalerView: View {
     @StateObject private var window = UpscalerWindowState()
     @Environment(\.displayScale) private var displayScale
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage("appearance") private var appearance = AppearanceChoice.system
     @GestureState private var dragTranslation = CGSize.zero
 
     var body: some View {
@@ -263,7 +303,23 @@ struct UpscalerView: View {
             job.shutDown()
         }
         .onOpenURL { select($0) }
+        .onChange(of: appearance, initial: true) { _, choice in
+            NSApp.appearance = choice.appearance
+        }
         .toolbar {
+            Menu {
+                Picker("Appearance", selection: $appearance) {
+                    ForEach(AppearanceChoice.allCases) { choice in
+                        Label(choice.name, systemImage: choice.symbol).tag(choice)
+                    }
+                }
+                .pickerStyle(.inline)
+            } label: {
+                Label("Appearance", systemImage: appearance.symbol)
+            }
+            .menuIndicator(.hidden)
+            .help("Appearance: \(appearance.name)")
+
             Button(action: choose) {
                 Label("Open Image…", systemImage: "photo.badge.plus")
             }
