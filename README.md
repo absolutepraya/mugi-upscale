@@ -4,7 +4,9 @@
 
 # Mugi
 
-Upscale photos to 4K on your Mac. Everything runs locally on the GPU, so your photos never leave your machine.
+Local AI image upscaler for macOS. Enlarge photos and AI-generated images to 4K, 8K, or a custom size on your Apple Silicon Mac.
+
+**[Download Mugi for Apple Silicon](https://github.com/absolutepraya/mugi-upscale/releases/latest)**
 
 [![CI](https://img.shields.io/github/actions/workflow/status/absolutepraya/mugi-upscale/ci.yml?style=flat-square&label=CI)](https://github.com/absolutepraya/mugi-upscale/actions)
 ![macOS 14+](https://img.shields.io/badge/macOS-14%2B-000000?style=flat-square&logo=apple&logoColor=white)
@@ -17,7 +19,7 @@ Upscale photos to 4K on your Mac. Everything runs locally on the GPU, so your ph
 
 </div>
 
-Mugi is a native SwiftUI app and a command line tool for enlarging images with DRCT-L, HAT-L, or SeedVR2. All three run on Apple Silicon through Metal. Processing stays offline after the selected model's weights are available.
+Mugi includes a native SwiftUI app and a command line tool. Choose SeedVR2 to reconstruct texture, DRCT-L for clean images, or HAT-L for soft or compressed images. All three run locally through Metal after the selected model's weights are available.
 
 ## Preview
 
@@ -53,11 +55,11 @@ You'll need an Apple Silicon Mac with macOS 14 or newer.
 
 ### From a DMG
 
-1. Download the current DMG from [GitHub Releases](https://github.com/absolutepraya/mugi-upscale/releases).
+1. Download the Apple Silicon DMG from the [latest GitHub release](https://github.com/absolutepraya/mugi-upscale/releases/latest).
 2. Open it and drag **Mugi.app** into **Applications**.
 
 > [!IMPORTANT]
-> The repository is private, so downloading a release needs a GitHub account with access. The app uses ad-hoc signing. If macOS blocks it, follow the [installation guide](packaging/INSTALL.md), which is also inside the disk image.
+> The app uses ad-hoc signing. If macOS blocks it, follow the [installation guide](packaging/INSTALL.md), which is also inside the disk image.
 
 ### From source
 
