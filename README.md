@@ -39,6 +39,14 @@ The close-ups use the same framing around the launch site. The original is enlar
 | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
 | ![Enlarged original crop of launch towers, roads, and shoreline](assets/examples/launch-original-detail.png) | ![Matching SeedVR2 crop showing finer detail around the towers and shoreline](assets/examples/launch-seedvr2-detail.png) |
 
+### Before and after with Anime 6B
+
+Anime 6B at 2× on a lightly compressed cartoon JPEG. Compare the outlines around the ears and the fine whisker lines. Select either image to open it at full size.
+
+| Original JPEG (256 × 256)                                                                                                                           | Anime 6B (512 × 512)                                                                                                              |
+| --------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| [![Original cartoon of an orange cat against mountains and a blue sky](assets/examples/cartoon-original.jpg)](assets/examples/cartoon-original.jpg) | [![The same cartoon upscaled 2× with Anime 6B](assets/examples/cartoon-anime-6b-2x.png)](assets/examples/cartoon-anime-6b-2x.png) |
+
 ## Features
 
 - **Local processing.** The DMG bundles Python and three models. Select SeedVR2 and click **Download** to get its weights (about 4 GB).
