@@ -23,7 +23,9 @@ Mugi includes a native SwiftUI app and a command line tool. Choose SeedVR2 to re
 
 ## Preview
 
-![Mugi v0.2.0 showing the original launch image and the SeedVR2 result side by side, with output controls and model ratings below](assets/examples/mugi-screenshot.png)
+![Mugi in dark mode showing the original rocket launch photo and its 4K SeedVR2 upscale side by side, with a translucent window frame](assets/examples/mugi-screenshot.png)
+
+Mugi in Dark mode with Glass set to 80%. The frosted frame lets the wallpaper or window behind it show through. Adjust Glass in **Settings → General**.
 
 ### Before and after with SeedVR2
 
