@@ -181,6 +181,7 @@ struct SystemMonitor: View {
                     HStack(spacing: 4) {
                         Text(gauge.id == "Memory" ? "MEM" : gauge.id)
                             .foregroundStyle(.secondary)
+                            .fixedSize()
                         if let value = text(gauge) {
                             Spacer(minLength: 2)
                             Text(value).lineLimit(1).fixedSize()
@@ -190,7 +191,7 @@ struct SystemMonitor: View {
                     track(gauge.fraction)
                         .frame(height: 6)
                 }
-                .frame(width: values == .usage ? 84 : 58)
+                .frame(minWidth: values == .usage ? 84 : 62)
                 .help(gauge.detail)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(gauge.id)
