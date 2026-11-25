@@ -58,6 +58,11 @@ Run `pnpm run check` before every commit. It must stay fast: no model loading, n
 
 `t3.json` registers `scripts/setup-worktree.mjs`, which T3 Code runs automatically in every new worktree (and adds Check and Format buttons to its scripts menu). It links `models/` from the main checkout, runs `pnpm install --frozen-lockfile`, then `./setup.sh`. If a worktree looks unprepared, run `node scripts/setup-worktree.mjs`.
 
+## Pull requests
+
+- **Include at least one screenshot of what changed** in the PR description whenever the PR changes the app (its UI or behavior you can see). Show the changed window, state, or setting so a reviewer sees the change without building it. Capture just that window rather than the whole screen, so nothing unrelated is shown.
+- **Skip the screenshot** for PRs that do not change the app, such as the README, license, `AGENTS.md`, CI, or other config and tooling. Say in the PR that the change has nothing to show.
+
 ## Releases
 
 Releases are automated. Do not create them by hand with `gh release create`.
