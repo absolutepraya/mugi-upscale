@@ -333,12 +333,14 @@ struct UpscalerApp: App {
     @AppStorage("appearance") private var appearance = AppearanceChoice.system
     @StateObject private var job = UpscaleJob()
     @StateObject private var library = ModelLibrary()
+    @StateObject private var updater = AppUpdater()
 
     var body: some Scene {
         Window("Mugi", id: "upscaler") {
             UpscalerView()
                 .environmentObject(job)
                 .environmentObject(library)
+                .environmentObject(updater)
         }
         .defaultSize(width: 960, height: 640)
         .commands {
@@ -355,6 +357,7 @@ struct UpscalerApp: App {
             SettingsView()
                 .environmentObject(job)
                 .environmentObject(library)
+                .environmentObject(updater)
         }
     }
 }
@@ -593,7 +596,7 @@ enum ImageExporter {
 private enum SettingsKey {
     static let all = ["appearance", "defaultModel", "longEdge", "defaultOutputSize", "tile", "autoSave",
                       "outputFolder", "outputFormat", "quality", "haptics", "settingsTab",
-                      "showStats", "statsValues"]
+                      "showStats", "statsValues", "glass", "updateCheck"]
 }
 
 struct SettingsView: View {
@@ -627,6 +630,7 @@ private struct GeneralSettings: View {
     @AppStorage("haptics") private var haptics = true
     @AppStorage("showStats") private var showStats = true
     @AppStorage("statsValues") private var statsValues = StatsValues.percent
+    @AppStorage("glass") private var glass = 1.0
     @State private var confirmingReset = false
 
     var body: some View {
@@ -637,6 +641,20 @@ private struct GeneralSettings: View {
                 }
             }
             .pickerStyle(.segmented)
+
+            LabeledContent("Glass") {
+                HStack(spacing: 10) {
+                    Slider(value: $glass, in: 0...1, step: 0.05)
+                        .frame(width: 180)
+                        .accessibilityLabel("Glass")
+                        .accessibilityValue("\(Int(glass * 100)) percent")
+                    Text("\(Int(glass * 100))%")
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                        .frame(width: 40, alignment: .trailing)
+                }
+            }
+            .help("How see-through the window is. 100% is full frosted glass and 0% is a solid window color.")
 
             Section("Upscaling") {
                 Picker("Default model", selection: $defaultModel) {
@@ -861,7 +879,7 @@ private struct OutputSettings: View {
     }
 }
 
-private extension Bundle {
+extension Bundle {
     var mugiVersion: String {
         object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
     }
@@ -878,6 +896,7 @@ private struct AboutSettings: View {
                 Text("Mugi").font(.title.bold())
                 Text("Version \(Bundle.main.mugiVersion)").font(.callout).foregroundStyle(.secondary)
             }
+            UpdateSection()
             Text("Upscale photos to 4K privately on your Mac. Everything runs on your GPU and nothing leaves your machine.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
@@ -930,11 +949,64 @@ private final class UpscalerWindowState: ObservableObject {
     }
 }
 
-private struct EnlargedPreview: Identifiable {
+/// Shows one image in its own resizable window that opens at most of the screen, one window per image.
+@MainActor
+private enum EnlargedPreviewWindow {
+    private final class Window: NSWindow {
+        override func cancelOperation(_ sender: Any?) { close() }
+    }
+
+    private final class Delegate: NSObject, NSWindowDelegate {
+        let closed: @MainActor () -> Void
+        init(closed: @escaping @MainActor () -> Void) { self.closed = closed }
+        func windowWillClose(_ notification: Notification) { closed() }
+    }
+
+    private static var open: [URL: (window: NSWindow, delegate: Delegate)] = [:]
+
+    static func show(label: String, photo: Photo, near parent: NSWindow?) {
+        if let existing = open[photo.url] {
+            // The file may have changed since this window opened, so show the current image.
+            existing.window.title = "\(label), \(photo.dimensions)"
+            if let hosting = existing.window.contentView as? NSHostingView<EnlargedPreviewView> {
+                hosting.rootView = EnlargedPreviewView(label: label, photo: photo)
+            }
+            existing.window.makeKeyAndOrderFront(nil)
+            return
+        }
+        let area = (parent?.screen ?? NSScreen.main)?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let size = CGSize(width: (area.width * 0.85).rounded(), height: (area.height * 0.85).rounded())
+        let window = Window(contentRect: CGRect(origin: .zero, size: size),
+                            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                            backing: .buffered, defer: false)
+        window.title = "\(label), \(photo.dimensions)"
+        window.isReleasedWhenClosed = false
+        window.contentMinSize = CGSize(width: 480, height: 360)
+        window.contentView = NSHostingView(rootView: EnlargedPreviewView(label: label, photo: photo))
+        window.setFrame(CGRect(x: area.midX - size.width / 2, y: area.midY - size.height / 2,
+                               width: size.width, height: size.height), display: false)
+        let url = photo.url
+        let delegate = Delegate { open[url] = nil }
+        window.delegate = delegate
+        open[url] = (window, delegate)
+        window.makeKeyAndOrderFront(nil)
+    }
+}
+
+private struct EnlargedPreviewView: View {
     let label: String
     let photo: Photo
 
-    var id: URL { photo.url }
+    var body: some View {
+        Image(nsImage: photo.preview)
+            .resizable()
+            .interpolation(.high)
+            .scaledToFit()
+            .padding(16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(nsColor: .underPageBackgroundColor))
+            .accessibilityLabel("\(label) image")
+    }
 }
 
 struct UpscalerView: View {
@@ -942,8 +1014,8 @@ struct UpscalerView: View {
     private static let previewPadding: CGFloat = 20
     @EnvironmentObject private var job: UpscaleJob
     @EnvironmentObject private var library: ModelLibrary
+    @EnvironmentObject private var updater: AppUpdater
     @StateObject private var window = UpscalerWindowState()
-    @State private var enlargedPreview: EnlargedPreview?
     @State private var showingOutputSize = false
     @Environment(\.displayScale) private var displayScale
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -958,6 +1030,7 @@ struct UpscalerView: View {
     @AppStorage("haptics") private var haptics = true
     @AppStorage("showStats") private var showStats = true
     @AppStorage("statsValues") private var statsValues = StatsValues.percent
+    @AppStorage("glass") private var glass = 1.0
     @GestureState private var dragTranslation = CGSize.zero
 
     private var defaultSizeRequest: OutputSizeRequest {
@@ -983,7 +1056,13 @@ struct UpscalerView: View {
         }
         .padding(.horizontal, 10)
         .padding(.bottom, 8)
-        .background { FrostedBackground().ignoresSafeArea() }
+        .background {
+            ZStack {
+                FrostedBackground()
+                Color(nsColor: .windowBackgroundColor).opacity(1 - glass)
+            }
+            .ignoresSafeArea()
+        }
         .background(WindowChrome())
         .toolbarBackground(.hidden, for: .windowToolbar)
         .toolbar(removing: defaultToolbarTitle)
@@ -993,6 +1072,7 @@ struct UpscalerView: View {
             library.shutDown()
         }
         .onAppear(perform: library.refresh)
+        .task { await updater.checkOnLaunch() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             library.refresh()
         }
@@ -1061,26 +1141,6 @@ struct UpscalerView: View {
         } message: {
             Text(window.errorMessage ?? "")
         }
-        .sheet(item: $enlargedPreview) { preview in
-            VStack(spacing: 12) {
-                HStack {
-                    Text(preview.label).font(.headline)
-                    Text(preview.photo.dimensions)
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button("Done") { enlargedPreview = nil }
-                        .keyboardShortcut(.cancelAction)
-                }
-                Image(nsImage: preview.photo.preview)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .accessibilityLabel("\(preview.label) image")
-            }
-            .padding(Self.previewPadding)
-            .frame(width: 820, height: 540)
-        }
     }
 
     private var defaultToolbarTitle: ToolbarDefaultItemKind? {
@@ -1127,21 +1187,6 @@ struct UpscalerView: View {
             if let error = library.error, window.model == .seedvr2 {
                 Text(error).font(.caption).foregroundStyle(.secondary)
             }
-            ZStack {
-                if job.running {
-                    Group {
-                        if let progress = job.progress {
-                            ProgressView(value: progress)
-                                .accessibilityLabel("Tile progress")
-                        } else {
-                            ProgressView().progressViewStyle(.linear)
-                        }
-                    }
-                    .animation(motion, value: job.progress)
-                    .transition(.opacity)
-                }
-            }
-            .frame(height: 6)
             HStack(alignment: .bottom, spacing: 16) {
                 statusRow
                 if showStats {
@@ -1153,6 +1198,26 @@ struct UpscalerView: View {
         .controlSize(.large)
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
+        .animation(motion, value: job.running)
+    }
+
+    /// Progress for the running upscale, at the left end of the action row.
+    private var loader: some View {
+        ZStack {
+            if job.running {
+                Group {
+                    if let progress = job.progress {
+                        ProgressView(value: progress)
+                            .accessibilityLabel("Tile progress")
+                    } else {
+                        ProgressView().progressViewStyle(.linear)
+                    }
+                }
+                .animation(motion, value: job.progress)
+                .transition(.opacity)
+            }
+        }
+        .frame(maxWidth: .infinity)
         .animation(motion, value: job.running)
     }
 
@@ -1381,7 +1446,10 @@ struct UpscalerView: View {
                     }
                 }
                 .frame(height: Self.previewPadding)
-                actionButtons.frame(maxWidth: .infinity, alignment: .trailing)
+                HStack(spacing: 20) {
+                    loader
+                    actionButtons.fixedSize().layoutPriority(1)
+                }
             }
         }
     }
@@ -1466,7 +1534,7 @@ struct UpscalerView: View {
                         .contentTransition(.numericText())
                         .transition(.opacity)
                     Button {
-                        enlargedPreview = EnlargedPreview(label: label, photo: photo)
+                        EnlargedPreviewWindow.show(label: label, photo: photo, near: NSApp.keyWindow)
                     } label: {
                         Image(systemName: "arrow.up.right.square")
                             .frame(width: 22, height: 20)
@@ -1774,6 +1842,7 @@ private struct TitleItem: ToolbarContent {
                 .font(.caption.monospaced())
                 .foregroundStyle(.secondary)
                 .accessibilityLabel("Version \(Bundle.main.mugiVersion)")
+            UpdateBadge()
         }
         .fixedSize()
     }
