@@ -58,9 +58,18 @@ Run `pnpm run check` before every commit. It must stay fast: no model loading, n
 
 `t3.json` registers `scripts/setup-worktree.mjs`, which T3 Code runs automatically in every new worktree (and adds Check and Format buttons to its scripts menu). It links `models/` from the main checkout, runs `pnpm install --frozen-lockfile`, then `./setup.sh`. If a worktree looks unprepared, run `node scripts/setup-worktree.mjs`.
 
+## Pull requests
+
+- **Include at least one screenshot of what changed** in the PR description whenever the PR changes the app (its UI or behavior you can see). Show the changed window, state, or setting so a reviewer sees the change without building it. Capture just that window rather than the whole screen, and check that nothing private is visible.
+- **Skip the screenshot** for PRs that do not change the app, such as the README, license, `AGENTS.md`, CI, or other config and tooling. Say in the PR that the change has nothing to show.
+- **Host screenshots as assets of the `pr-assets` prerelease**, never on a third-party image host. GitHub cannot attach an image to a PR description through its API, so the description links to the asset. This is the one prerelease that is allowed, and it is kept for good so merged PRs keep their images.
+  1. If the prerelease does not exist, create it once: `gh release create pr-assets --prerelease --latest=false --title "PR screenshots" --notes "Screenshots for pull request descriptions. This is not a release."`
+  2. Open the PR, then upload each image named `pr-<number>-<what>.png` with `gh release upload pr-assets <file> --clobber`.
+  3. Link it in the description: `![what changed](https://github.com/absolutepraya/mugi-upscale/releases/download/pr-assets/pr-<number>-<what>.png)`, with a sentence on what to look at.
+
 ## Releases
 
-Releases are automated. Do not create them by hand with `gh release create`.
+Releases are automated. Do not create them by hand with `gh release create`. The only exception is the `pr-assets` prerelease under Pull requests, which the updater ignores because it reads only the latest full release.
 
 1. Merge to `main` and wait for CI to pass.
 2. Start the **macOS Release** workflow (`.github/workflows/macos-release.yml`) from `main` with a new `MAJOR.MINOR.PATCH` version.
