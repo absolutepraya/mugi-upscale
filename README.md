@@ -66,17 +66,19 @@ Setup creates a local Python environment, downloads the SeedVR2 runtime source, 
 1. Click **Add Photo** (⌘O) or drop a photo onto the window.
 2. Select a model. **Source fidelity** describes how closely it tends to preserve shapes, colors, and lettering. **Natural texture** describes how convincingly it tends to reconstruct photo detail. Hover over or click the info button beside either metric for an explanation. The bars are model guides and results vary with the image. If SeedVR2 is missing, click **Download** next to its bars. The status row shows download speed and progress, and you can pause and resume.
 3. Optionally click **Output Size** to set the size for this photo. Size it by **Scale** (such as 2×), **Long edge**, **Width**, or **Height**, up to 8,192 px, or pick a preset. Mugi keeps the original aspect ratio. The default comes from Settings.
-4. Click **Upscale**. The timer includes model loading and PNG preparation. SeedVR2 shows its processing stage and may take several minutes. If the chosen size is not larger than the photo, the button reads **Resize** and Mugi resizes it without a model.
+4. Click **Upscale**. A progress bar appears at the left of the buttons. The timer includes model loading and PNG preparation. SeedVR2 shows its processing stage and may take several minutes. If the chosen size is not larger than the photo, the button reads **Resize** and Mugi resizes it without a model.
 5. When the second preview appears, click **Save…**, or turn on auto-save in Settings.
 
 The bottom right shows live CPU, memory, and GPU gauges. Hover one for details such as busy cores or GB in use.
 
 The icon buttons at the top right switch between System, Light, and Dark appearance and open **Settings** (⌘,).
 
-- **General:** appearance, default model with its source fidelity and natural texture bars, default output size (by scale, long edge, width, or height), tile size under Advanced, the system stats gauges (show or hide them, and show percentages, used / total, or no value text), haptic feedback, and a reset for all settings.
+- **General:** appearance, the **Glass** slider (how see-through the window is, from a solid window color at 0% to full frosted glass at 100%), default model with its source fidelity and natural texture bars, default output size (by scale, long edge, width, or height), tile size under Advanced, the system stats gauges (show or hide them, and show percentages, used / total, or no value text), haptic feedback, and a reset for all settings.
 - **Models:** check model availability, reveal model files in Finder, and download or delete SeedVR2. DRCT-L and HAT-L are included with Mugi.
 - **Output:** auto-save, the default output folder, and the image format, with a quality slider for JPEG and HEIC.
 - **About:** credits, source code, and model licenses.
+
+Click the arrow button beside a preview's size to open that image in its own larger window. It is resizable, and Esc closes it.
 
 Use **1:1** to inspect the output at one image pixel per display pixel. Drag either pane to pan both together. The original scales to the same framing as the output. **Fit** shows the whole image, and **Contain** shows the whole image at up to 1:1.
 
