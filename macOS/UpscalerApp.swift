@@ -1095,22 +1095,6 @@ struct UpscalerView: View {
             }
             #endif
 
-            ToolbarItem(placement: .primaryAction) {
-                Button(action: choose) {
-                    Label("Add Photo", systemImage: "photo.badge.plus")
-                        .labelStyle(.titleAndIcon)
-                }
-                .keyboardShortcut("o")
-                .help("Add a photo (⌘O)")
-                .disabled(job.running)
-            }
-
-            #if compiler(>=6.2)
-            if #available(macOS 26, *) {
-                ToolbarSpacer(.fixed, placement: .primaryAction)
-            }
-            #endif
-
             ToolbarItemGroup(placement: .primaryAction) {
                 Menu {
                     Picker("Appearance", selection: $appearance) {
@@ -1430,6 +1414,15 @@ struct UpscalerView: View {
                 .controlSize(.regular)
                 .disabled(outputTarget?.enlarges != true || job.running)
                 .help("Choose two models to render and compare side by side.")
+                .actionButton(prominent: false)
+                Button(action: choose) {
+                    Label("Add Photo", systemImage: "photo.badge.plus")
+                        .labelStyle(.titleAndIcon)
+                }
+                .keyboardShortcut("o")
+                .help("Add a photo (⌘O)")
+                .controlSize(.regular)
+                .disabled(job.running)
                 .actionButton(prominent: false)
             }
             VStack(spacing: 0) {
