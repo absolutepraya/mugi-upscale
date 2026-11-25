@@ -66,6 +66,8 @@ Releases are automated. Do not create them by hand with `gh release create`.
 2. Start the **macOS Release** workflow (`.github/workflows/macos-release.yml`) from `main` with a new `MAJOR.MINOR.PATCH` version.
 3. It builds the DMG and publishes a release titled `Mugi <version>` (tag `v<version>`) with `mugi-<version>-arm64.dmg`, its `.sha256`, `packaging/INSTALL.md`, and generated notes.
 
+The app updates itself from these releases (`macOS/Updater.swift`). It reads the latest release from the GitHub API without a token, so the repository must stay public, and it expects the assets `mugi-<version>-arm64.dmg` and `mugi-<version>-arm64.dmg.sha256` and a DMG whose app has the production bundle ID and the release version. Keep the asset names and that packaging if you change the release workflow or `packaging/build-dmg.sh`. To test an update end to end, build a copy with a lower `CFBundleShortVersionString` and a different bundle ID outside `/Applications`.
+
 The workflow fails if `v<version>` already exists. To redo a release, delete both the release and its tag (`gh release delete v<version> --cleanup-tag`) first, because a leftover tag keeps pointing at the old commit. The user-facing name is **Mugi**; the repository is `mugi-upscale`. Do not reintroduce the old placeholder name "4K Upscaler".
 
 ## License

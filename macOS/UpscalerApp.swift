@@ -333,12 +333,14 @@ struct UpscalerApp: App {
     @AppStorage("appearance") private var appearance = AppearanceChoice.system
     @StateObject private var job = UpscaleJob()
     @StateObject private var library = ModelLibrary()
+    @StateObject private var updater = AppUpdater()
 
     var body: some Scene {
         Window("Mugi", id: "upscaler") {
             UpscalerView()
                 .environmentObject(job)
                 .environmentObject(library)
+                .environmentObject(updater)
         }
         .defaultSize(width: 960, height: 640)
         .commands {
@@ -355,6 +357,7 @@ struct UpscalerApp: App {
             SettingsView()
                 .environmentObject(job)
                 .environmentObject(library)
+                .environmentObject(updater)
         }
     }
 }
@@ -593,7 +596,7 @@ enum ImageExporter {
 private enum SettingsKey {
     static let all = ["appearance", "defaultModel", "longEdge", "defaultOutputSize", "tile", "autoSave",
                       "outputFolder", "outputFormat", "quality", "haptics", "settingsTab",
-                      "showStats", "statsValues"]
+                      "showStats", "statsValues", "updateCheck"]
 }
 
 struct SettingsView: View {
@@ -861,7 +864,7 @@ private struct OutputSettings: View {
     }
 }
 
-private extension Bundle {
+extension Bundle {
     var mugiVersion: String {
         object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
     }
@@ -878,6 +881,7 @@ private struct AboutSettings: View {
                 Text("Mugi").font(.title.bold())
                 Text("Version \(Bundle.main.mugiVersion)").font(.callout).foregroundStyle(.secondary)
             }
+            UpdateSection()
             Text("Upscale photos to 4K privately on your Mac. Everything runs on your GPU and nothing leaves your machine.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
@@ -942,6 +946,7 @@ struct UpscalerView: View {
     private static let previewPadding: CGFloat = 20
     @EnvironmentObject private var job: UpscaleJob
     @EnvironmentObject private var library: ModelLibrary
+    @EnvironmentObject private var updater: AppUpdater
     @StateObject private var window = UpscalerWindowState()
     @State private var enlargedPreview: EnlargedPreview?
     @State private var showingOutputSize = false
@@ -993,6 +998,7 @@ struct UpscalerView: View {
             library.shutDown()
         }
         .onAppear(perform: library.refresh)
+        .task { await updater.checkOnLaunch() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             library.refresh()
         }
@@ -1774,6 +1780,7 @@ private struct TitleItem: ToolbarContent {
                 .font(.caption.monospaced())
                 .foregroundStyle(.secondary)
                 .accessibilityLabel("Version \(Bundle.main.mugiVersion)")
+            UpdateBadge()
         }
         .fixedSize()
     }

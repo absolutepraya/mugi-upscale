@@ -24,6 +24,6 @@ if [ "$channel" = dev ]; then
     plutil -replace CFBundleShortVersionString -string dev "$plist"
 fi
 xcrun swiftc -swift-version 6 -target arm64-apple-macos14.0 -parse-as-library -O \
-    macOS/UpscalerApp.swift macOS/ImageViewport.swift macOS/ModelDownloads.swift macOS/SystemStats.swift -o "$app/Contents/MacOS/Upscaler"
+    macOS/UpscalerApp.swift macOS/ImageViewport.swift macOS/ModelDownloads.swift macOS/SystemStats.swift macOS/Updater.swift -o "$app/Contents/MacOS/Upscaler"
 codesign --force --sign - "$app"
 printf 'Built %s/%s\n' "$(cd "$(dirname "$app")" && pwd)" "$(basename "$app")"

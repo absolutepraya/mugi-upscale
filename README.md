@@ -76,7 +76,13 @@ The icon buttons at the top right switch between System, Light, and Dark appeara
 - **General:** appearance, default model with its source fidelity and natural texture bars, default output size (by scale, long edge, width, or height), tile size under Advanced, the system stats gauges (show or hide them, and show percentages, used / total, or no value text), haptic feedback, and a reset for all settings.
 - **Models:** check model availability, reveal model files in Finder, and download or delete SeedVR2. DRCT-L and HAT-L are included with Mugi.
 - **Output:** auto-save, the default output folder, and the image format, with a quality slider for JPEG and HEIC.
-- **About:** credits, source code, and model licenses.
+- **About:** the version, updates (see below), credits, source code, and model licenses.
+
+### Updates
+
+Mugi checks GitHub for a newer release when it opens, at most once a day. When one exists, an **Update** button appears beside the version in the title bar. Click it to read the release notes, then **Update and Restart**. Mugi downloads the new version, checks it against the release's SHA-256 checksum, replaces itself, and relaunches. It never installs or restarts on its own, and the button waits while an upscale is running. If a step fails, your installed copy is left as it was.
+
+In **Settings > About** you can check now, see when Mugi last checked, and turn off the automatic check. If Mugi is running from a disk image or a folder it cannot write to, the button opens the release page instead. Development builds ("Mugi Dev") never check for updates.
 
 Use **1:1** to inspect the output at one image pixel per display pixel. Drag either pane to pan both together. The original scales to the same framing as the output. **Fit** shows the whole image, and **Contain** shows the whole image at up to 1:1.
 
