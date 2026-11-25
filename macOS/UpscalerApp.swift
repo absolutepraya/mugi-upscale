@@ -962,6 +962,11 @@ private enum EnlargedPreviewWindow {
 
     static func show(label: String, photo: Photo, near parent: NSWindow?) {
         if let existing = open[photo.url] {
+            // The file may have changed since this window opened, so show the current image.
+            existing.window.title = "\(label), \(photo.dimensions)"
+            if let hosting = existing.window.contentView as? NSHostingView<EnlargedPreviewView> {
+                hosting.rootView = EnlargedPreviewView(label: label, photo: photo)
+            }
             existing.window.makeKeyAndOrderFront(nil)
             return
         }
