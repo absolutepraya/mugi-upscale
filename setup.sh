@@ -30,19 +30,24 @@ esac
 mkdir -p models
 
 install_model() (
-    name=$1 revision=$2 checksum=$3
-    target="models/$name.safetensors"
+    name=$1 url=$2 checksum=$3
+    target="models/$name"
     if [ -f "$target" ] && printf '%s  %s\n' "$checksum" "$target" | shasum -a 256 -c; then
         exit 0
     fi
     temporary=$(mktemp "models/$name.XXXXXX")
     trap 'rm -f "$temporary"' EXIT
-    curl -fsSL --retry 2 "https://huggingface.co/Phips/$name/resolve/$revision/$name.safetensors?download=true" -o "$temporary"
+    curl -fsSL --retry 2 "$url" -o "$temporary"
     printf '%s  %s\n' "$checksum" "$temporary" | shasum -a 256 -c
     mv "$temporary" "$target"
 )
 
-install_model 4xNomos2_hq_drct-l b2a537e13edc4c1108506df04ee0807ffc927d74 \
+install_model 4xNomos2_hq_drct-l.safetensors \
+    'https://huggingface.co/Phips/4xNomos2_hq_drct-l/resolve/b2a537e13edc4c1108506df04ee0807ffc927d74/4xNomos2_hq_drct-l.safetensors?download=true' \
     1a10632101bb2aca6151301dd811921f1c438ff55159fd579fb576c143477797
-install_model 4xNomos8kSCHAT-L 35fab911f23d95fcf6e34815c27f7c082567a0d5 \
+install_model 4xNomos8kSCHAT-L.safetensors \
+    'https://huggingface.co/Phips/4xNomos8kSCHAT-L/resolve/35fab911f23d95fcf6e34815c27f7c082567a0d5/4xNomos8kSCHAT-L.safetensors?download=true' \
     304d2d319cd75109ec1e479806d345825cd0ca580c536a2ef8b79e283e78525c
+install_model RealESRGAN_x4plus_anime_6B.pth \
+    'https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.2.4/RealESRGAN_x4plus_anime_6B.pth' \
+    f872d837d3c90ed2e05227bed711af5671a6fd1c9f7d7e91c911a61f155e99da

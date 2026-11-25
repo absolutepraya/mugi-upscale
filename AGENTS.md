@@ -1,6 +1,6 @@
 # Mugi
 
-Local image upscaler for Apple Silicon. A SwiftUI app (`macOS/`) drives a Python engine (`upscale.py`, `seedvr2.py`) that runs DRCT-L, HAT-L, or SeedVR2 through Metal. See `README.md` for what the app does and how to use it.
+Local image upscaler for Apple Silicon. A SwiftUI app (`macOS/`) drives a Python engine (`upscale.py`, `seedvr2.py`) that runs DRCT-L, HAT-L, SeedVR2, or Anime 6B through Metal. See `README.md` for what the app does and how to use it.
 
 ## Commands
 
@@ -81,7 +81,7 @@ The workflow fails if `v<version>` already exists. To redo a release, delete bot
 
 ## License
 
-The code is under the PolyForm Noncommercial License 1.0.0 (`LICENSE`). It is source-available, not open source: never call it "open source" or "MIT", and never add MIT or other permissive headers or badges. Commercial and internal business use needs a separate commercial license from the owner. Keep third-party licenses and credits intact (models are CC BY 4.0, SeedVR2 is upstream-licensed).
+The code is under the PolyForm Noncommercial License 1.0.0 (`LICENSE`). It is source-available, not open source: never call it "open source" or "MIT", and never add MIT or other permissive headers or badges. Commercial and internal business use needs a separate commercial license from the owner. Keep third-party licenses and credits intact. DRCT-L and HAT-L are CC BY 4.0. See the upstream licensing for SeedVR2 and the Real-ESRGAN license in `packaging/`.
 
 ## Docs
 

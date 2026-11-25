@@ -17,6 +17,7 @@ MODEL_DIR = ENGINE_DIR / "models"
 MODELS = {
     "drct": MODEL_DIR / "4xNomos2_hq_drct-l.safetensors",
     "hat": MODEL_DIR / "4xNomos8kSCHAT-L.safetensors",
+    "anime": MODEL_DIR / "RealESRGAN_x4plus_anime_6B.pth",
 }
 EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff"}
 SRGB = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB"))
@@ -118,7 +119,7 @@ def main():
     parser.add_argument("--device", choices=("mps", "cpu"), default="mps")
     args = parser.parse_args()
     if args.model == "seedvr2" and args.device != "mps":
-        parser.error("SeedVR2 requires Apple Silicon with Metal. For CPU use DRCT-L or HAT-L.")
+        parser.error("SeedVR2 requires Apple Silicon with Metal. For CPU use DRCT-L, HAT-L, or Anime 6B.")
     if args.long_edge < 1:
         parser.error("--long-edge must be positive")
     if args.input.is_dir():

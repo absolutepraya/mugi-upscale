@@ -19,11 +19,13 @@ Local AI image upscaler for macOS. Enlarge photos and AI-generated images to 4K,
 
 </div>
 
-Mugi includes a native SwiftUI app and a command line tool. Choose SeedVR2 to reconstruct texture, DRCT-L for clean images, or HAT-L for soft or compressed images. All three run locally through Metal after the selected model's weights are available.
+Mugi includes a native SwiftUI app and a command line tool. Choose SeedVR2 to reconstruct texture, Anime 6B for cleaner anime and cartoons, DRCT-L for clean graphics, or HAT-L for soft or compressed photos. Each model runs locally through Metal after its weights are available.
 
 ## Preview
 
-![Mugi v0.2.0 showing the original launch image and the SeedVR2 result side by side, with output controls and model ratings below](assets/examples/mugi-screenshot.png)
+![Mugi in dark mode showing the original rocket launch photo and its 4K SeedVR2 upscale side by side, with a translucent window frame](assets/examples/mugi-screenshot.png)
+
+Mugi in Dark mode with Glass set to 80%. The frosted frame lets the wallpaper or window behind it show through. Adjust Glass in **Settings → General**.
 
 ### Before and after with SeedVR2
 
@@ -39,10 +41,18 @@ The close-ups use the same framing around the launch site. The original is enlar
 | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
 | ![Enlarged original crop of launch towers, roads, and shoreline](assets/examples/launch-original-detail.png) | ![Matching SeedVR2 crop showing finer detail around the towers and shoreline](assets/examples/launch-seedvr2-detail.png) |
 
+### Before and after with Anime 6B
+
+Anime 6B at 2× on a lightly compressed cartoon JPEG. Compare the outlines around the ears and the fine whisker lines. Select either image to open it at full size.
+
+| Original JPEG (256 × 256)                                                                                                                           | Anime 6B (512 × 512)                                                                                                              |
+| --------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| [![Original cartoon of an orange cat against mountains and a blue sky](assets/examples/cartoon-original.jpg)](assets/examples/cartoon-original.jpg) | [![The same cartoon upscaled 2× with Anime 6B](assets/examples/cartoon-anime-6b-2x.png)](assets/examples/cartoon-anime-6b-2x.png) |
+
 ## Features
 
-- **Local processing.** The DMG bundles Python and the DRCT-L and HAT-L weights. Select SeedVR2 and click **Download** to get its weights (about 4 GB).
-- **Three models.** DRCT-L for clean images, HAT-L for compressed or soft images, and SeedVR2 for rebuilding textures in AI images.
+- **Local processing.** The DMG bundles Python and three models. Select SeedVR2 and click **Download** to get its weights (about 4 GB).
+- **Model guidance.** See what each model is best for, then compare how it handles details, outlines, and compression.
 - **Compare models.** Choose any two models and view their results side by side before you save one.
 - **Inspect at 1:1.** Pan and zoom both panes together to check fine detail.
 - **Your format.** Exports 8-bit sRGB PNG by default, or JPEG, TIFF, or HEIC, with ICC profiles and EXIF orientation handled for you.
@@ -73,7 +83,7 @@ cd mugi-upscale
 open "build/Mugi Dev.app"
 ```
 
-Setup creates a local Python environment, downloads the SeedVR2 runtime source, and verifies the DRCT-L and HAT-L weights (about 390 MiB in total).
+Setup creates a local Python environment, downloads the SeedVR2 runtime source, and verifies the bundled model weights (about 406 MiB in total).
 
 > [!NOTE]
 > Keep the built app in the repository's `build/` directory so it can find the environment and model weights. Rebuild with `./build-app.sh` after editing the Swift source.
@@ -84,7 +94,7 @@ Setup creates a local Python environment, downloads the SeedVR2 runtime source, 
 ## Use the app
 
 1. Click **Add Photo** (⌘O) at the top right of the preview area, or drop a photo onto the window.
-2. Select a model. **Source fidelity** describes how closely it tends to preserve shapes, colors, and lettering. **Natural texture** describes how convincingly it tends to reconstruct photo detail. Hover over or click the info button beside either metric for an explanation. The bars are model guides and results vary with the image. If SeedVR2 is missing, click **Download** next to its bars. The status row shows download speed and progress, and you can pause and resume.
+2. Select a model using its **Best for** tip. **Source fidelity** covers shapes, colors, and lettering. **Natural texture** applies to photos. **Line preservation** describes how well fine strokes keep their shape. **Compression cleanup** describes how well the model reduces blocks and halos while keeping detail. Hover over or click an info button for an explanation. The bars are guides and results vary with the image. If SeedVR2 is missing, click **Download** next to its bars. The status row shows download speed and progress, and you can pause and resume.
 3. Optionally click **Output Size** to set the size for this photo. Size it by **Scale** (such as 2×), **Long edge**, **Width**, or **Height**, up to 8,192 px, or pick a preset. Mugi keeps the original aspect ratio. The default comes from Settings.
 4. Click **Upscale**. A progress bar appears at the left of the buttons. The timer includes model loading and PNG preparation. SeedVR2 shows its processing stage and may take several minutes. If the chosen size is not larger than the photo, the button reads **Resize** and Mugi resizes it without a model.
 5. When the second preview appears, click **Save…**, or turn on auto-save in Settings.
@@ -93,8 +103,8 @@ The bottom right shows live CPU, memory, and GPU gauges. Hover one for details s
 
 The icon buttons in the title bar switch between System, Light, and Dark appearance and open **Settings** (⌘,).
 
-- **General:** appearance, the **Glass** slider (how see-through the window is, from a solid window color at 0% to full frosted glass at 100%), default model with its source fidelity and natural texture bars, default output size (by scale, long edge, width, or height), tile size under Advanced, the system stats gauges (show or hide them, and show percentages, used / total, or no value text), haptic feedback, and a reset for all settings.
-- **Models:** check model availability, reveal model files in Finder, and download or delete SeedVR2. DRCT-L and HAT-L are included with Mugi.
+- **General:** appearance, the **Glass** slider (how see-through the window is, from a solid window color at 0% to full frosted glass at 100%), default model with its use-case tip and quality bars, default output size (by scale, long edge, width, or height), tile size under Advanced, the system stats gauges (show or hide them, and show percentages, used / total, or no value text), haptic feedback, and a reset for all settings.
+- **Models:** check model availability, reveal model files in Finder, and download or delete SeedVR2. DRCT-L, HAT-L, and Anime 6B are included with Mugi.
 - **Output:** auto-save, the default output folder, and the image format, with a quality slider for JPEG and HEIC.
 - **About:** the version, updates (see below), credits, source code, and model licenses.
 
@@ -126,14 +136,17 @@ uv run --locked upscale.py "/path/to/landscape.png" --model hat -o output/landsc
 
 # A generated image
 uv run --locked upscale.py "/path/to/generated.png" --model seedvr2 -o output/generated-seedvr2-4k.png
+
+# Anime or a cartoon
+uv run --locked upscale.py "/path/to/art.png" --model anime -o output/art-anime-4k.png
 ```
 
-| Option        | Default | What it does                                                                                                           |
-| ------------- | ------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `--model`     | `drct`  | `drct` for clean images, `hat` for compression and blur, or `seedvr2` to reconstruct textures                          |
-| `--long-edge` | `3840`  | Target size of the long edge in pixels. A 16:9 input becomes 3840 × 2160. Use `4096` for a 4,096-pixel long edge       |
-| `--tile`      | `256`   | DRCT-L and HAT-L input tile size: `128`, `192`, `256`, `320`, or `384`. Use `192` or `128` if Metal runs out of memory |
-| `--device`    | `mps`   | `mps` runs on the GPU through Metal. DRCT-L and HAT-L also support `cpu`                                               |
+| Option        | Default | What it does                                                                                                                      |
+| ------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `--model`     | `drct`  | `drct` for clean graphics, `hat` for compression and blur, `seedvr2` for natural textures, or `anime` for anime and cartoons      |
+| `--long-edge` | `3840`  | Target size of the long edge in pixels. A 16:9 input becomes 3840 × 2160. Use `4096` for a 4,096-pixel long edge                  |
+| `--tile`      | `256`   | DRCT-L, HAT-L, and Anime 6B input tile size: `128`, `192`, `256`, `320`, or `384`. Use `192` or `128` if Metal runs out of memory |
+| `--device`    | `mps`   | `mps` runs on the GPU through Metal. DRCT-L, HAT-L, and Anime 6B also support `cpu`                                               |
 
 Other aspect ratios keep their framing. The CLI refuses to overwrite an existing output path, so use a new filename or directory to rerun.
 
@@ -151,11 +164,11 @@ pnpm run fmt          # apply formatting
 pnpm run test:manual  # real upscale of a tiny image with a model; local only, never in CI
 ```
 
-CI runs the same checks, then builds both app variants. The manual test needs the environment and weights from `./setup.sh`. Set `MODEL=hat` or `MODEL=seedvr2` to try another model. New worktrees created in T3 Code set themselves up through [`t3.json`](t3.json). See [`AGENTS.md`](AGENTS.md) for the project conventions that contributors and coding agents follow.
+CI runs the same checks, then builds both app variants. The manual test needs the environment and weights from `./setup.sh`. Set `MODEL=hat`, `MODEL=seedvr2`, or `MODEL=anime` to try another model. New worktrees created in T3 Code set themselves up through [`t3.json`](t3.json). See [`AGENTS.md`](AGENTS.md) for the project conventions that contributors and coding agents follow.
 
 ## How it works
 
-DRCT-L and HAT-L use [Spandrel](https://github.com/chaiNNer-org/spandrel) and run a native 4× pass on overlapping tiles. SeedVR2 runs a diffusion pass at a working resolution based on the requested size, aspect ratio, and unified memory. The working resolution is capped at about 4K on a Mac with 24 GB of memory and lower on Macs with less memory. Mugi uses Lanczos to reach the requested dimensions, including 8K. If the source already meets the model's working size, Mugi resizes it directly.
+DRCT-L, HAT-L, and Anime 6B use [Spandrel](https://github.com/chaiNNer-org/spandrel) and run a native 4× pass on overlapping tiles. SeedVR2 runs a diffusion pass at a working resolution based on the requested size, aspect ratio, and unified memory. The working resolution is capped at about 4K on a Mac with 24 GB of memory and lower on Macs with less memory. Mugi uses Lanczos to reach the requested dimensions, including 8K. If the source already meets the model's working size, Mugi resizes it directly.
 
 Run one job at a time so the GPU has room for the tiles.
 
@@ -165,6 +178,8 @@ Setup downloads these weights from Philip Hofmann's model repositories under [CC
 
 - DRCT-L: [4xNomos2_hq_drct-l](https://huggingface.co/Phips/4xNomos2_hq_drct-l)
 - HAT-L: [4xNomos8kSCHAT-L](https://huggingface.co/Phips/4xNomos8kSCHAT-L)
+
+Anime 6B uses the [Real-ESRGAN anime checkpoint](https://github.com/xinntao/Real-ESRGAN/blob/master/docs/anime_model.md) by Xintao Wang and contributors. See the [upstream BSD 3-Clause license](packaging/REAL-ESRGAN-LICENSE.txt). Start near 2× for cleaner anime and cartoons. On tiny or heavily compressed inputs, check for broken outlines, lost strokes, or reshaped features at 1:1. For clean logos or fine hatch lines, start with DRCT-L.
 
 SeedVR2 uses the [upstream CLI integration](https://github.com/numz/ComfyUI-SeedVR2_VideoUpscaler/tree/4490bd1f482e026674543386bb2a4d176da245b9) and the 3B Q8 model. Its weights are verified on download and cached in `~/Library/Caches/dev.abhipraya.local-upscaler/SeedVR2`.
 
@@ -178,7 +193,7 @@ On an Apple Silicon Mac with `uv` and the Apple developer tools:
 ./packaging/build-dmg.sh 0.1.0
 ```
 
-The DMG appears under `build/dist/`. It contains the app, Python, its locked dependencies, and the DRCT-L and HAT-L weights. Use **Download** in the app to install SeedVR2.
+The DMG appears under `build/dist/`. It contains the app, Python, its locked dependencies, and the DRCT-L, HAT-L, and Anime 6B weights. Use **Download** in the app to install SeedVR2.
 
 The [CI workflow](.github/workflows/ci.yml) runs the fast checks, then builds the app, on pull requests and pushes to `main`. To publish a release, start the [macOS Release workflow](.github/workflows/macos-release.yml) from `main` with a new version such as `0.1.0`. It builds the DMG and publishes a release named `Mugi <version>` with the DMG, a SHA-256 checksum, the install instructions, and notes generated from the merged pull requests. It refuses to run if that version's release already exists.
 

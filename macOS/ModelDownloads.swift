@@ -126,6 +126,7 @@ final class ModelLibrary: ObservableObject {
         localFiles = [
             .drct: [directory.appending(path: "4xNomos2_hq_drct-l.safetensors")].filter { files.fileExists(atPath: $0.path) },
             .hat: [directory.appending(path: "4xNomos8kSCHAT-L.safetensors")].filter { files.fileExists(atPath: $0.path) },
+            .anime: [directory.appending(path: "RealESRGAN_x4plus_anime_6B.pth")].filter { files.fileExists(atPath: $0.path) },
             .seedvr2: found
         ]
         seedHasFiles = !found.isEmpty

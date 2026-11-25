@@ -4,7 +4,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 enum UpscaleModel: String, CaseIterable, Identifiable {
-    case seedvr2, drct, hat
+    case seedvr2, anime, drct, hat
 
     static let defaultChoice: Self = .seedvr2
 
@@ -13,15 +13,17 @@ enum UpscaleModel: String, CaseIterable, Identifiable {
         switch self {
         case .drct: "DRCT-L"
         case .hat: "HAT-L"
+        case .anime: "Anime 6B"
         case .seedvr2: "SeedVR2"
         }
     }
 
-    var description: String {
+    var guidance: String {
         switch self {
-        case .drct: "Enlarges clean images with subtle changes to detail."
-        case .hat: "Sharpens soft images and cleans up compression artifacts."
-        case .seedvr2: "Rebuilds textures in AI images and can change fine shapes and color."
+        case .drct: "Best for clean graphics and images with text. Preserves fine details in clean sources."
+        case .hat: "Best for soft or compressed photos. Smooths compression artifacts."
+        case .anime: "Best for cleaner anime and cartoons around 2×. Heavy compression can break fine lines."
+        case .seedvr2: "Best for AI photos. Rebuilds texture and can change fine shapes and color."
         }
     }
 
@@ -29,6 +31,7 @@ enum UpscaleModel: String, CaseIterable, Identifiable {
         switch self {
         case .drct: .high
         case .hat, .seedvr2: .moderate
+        case .anime: .limited
         }
     }
 
@@ -37,15 +40,32 @@ enum UpscaleModel: String, CaseIterable, Identifiable {
         case .drct: .limited
         case .hat: .moderate
         case .seedvr2: .high
+        case .anime: .notApplicable
+        }
+    }
+
+    var linePreservation: ModelLevel {
+        switch self {
+        case .drct: .high
+        case .hat, .seedvr2, .anime: .moderate
+        }
+    }
+
+    var compressionCleanup: ModelLevel {
+        switch self {
+        case .drct: .limited
+        case .anime: .moderate
+        case .hat, .seedvr2: .high
         }
     }
 }
 
 enum ModelLevel: Int {
-    case limited = 1, moderate, high
+    case notApplicable = 0, limited, moderate, high
 
     var label: String {
         switch self {
+        case .notApplicable: "N/A"
         case .limited: "Limited"
         case .moderate: "Moderate"
         case .high: "High"
@@ -57,13 +77,21 @@ private struct ModelBars: View {
     let model: UpscaleModel
 
     var body: some View {
-        HStack(alignment: .top, spacing: 20) {
-            bar("Source fidelity", level: model.sourceFidelity,
-                explanation: "How closely the model keeps the shapes, colors, and text from your original image.")
-            bar("Natural texture", level: model.naturalTexture,
-                explanation: "How realistic fine details like hair, skin, or fabric tend to look after upscaling a photo.")
+        Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
+            GridRow {
+                bar("Source fidelity", level: model.sourceFidelity,
+                    explanation: "How closely the model keeps the shapes, colors, and text from your original image.")
+                bar("Natural texture", level: model.naturalTexture,
+                    explanation: "How realistic details like hair or fabric look in photos. This rating applies to photo models.")
+            }
+            GridRow {
+                bar("Line preservation", level: model.linePreservation,
+                    explanation: "How well fine strokes and outlines stay intact and keep their shape. DRCT-L works best with clean input.")
+                bar("Compression cleanup", level: model.compressionCleanup,
+                    explanation: "How well the model reduces blocky patches and halos while keeping fine detail.")
+            }
         }
-        .frame(maxWidth: 350)
+        .frame(maxWidth: 410)
     }
 
     private func bar(_ title: String, level: ModelLevel, explanation: String) -> some View {
@@ -122,6 +150,9 @@ private struct ModelComparison {
         .init(left: .drct, right: .hat),
         .init(left: .drct, right: .seedvr2),
         .init(left: .hat, right: .seedvr2),
+        .init(left: .drct, right: .anime),
+        .init(left: .hat, right: .anime),
+        .init(left: .anime, right: .seedvr2),
     ]
 
     var models: [UpscaleModel] { [left, right] }
@@ -664,7 +695,7 @@ private struct GeneralSettings: View {
                 }
                 .pickerStyle(.segmented)
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(defaultModel.description)
+                    Text(defaultModel.guidance)
                         .font(.callout)
                         .foregroundStyle(.secondary)
                     ModelBars(model: defaultModel)
@@ -689,7 +720,7 @@ private struct GeneralSettings: View {
                         Text(size == 256 ? "\(size) px (default)" : "\(size) px").tag(size)
                     }
                 }
-                Text("For DRCT-L and HAT-L, smaller tiles use less memory but take longer.")
+                Text("Smaller tiles use less memory but take longer with DRCT-L, HAT-L, and Anime 6B.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -734,6 +765,7 @@ private struct ModelsSettings: View {
             Section("Installed models") {
                 bundledModel(.drct)
                 bundledModel(.hat)
+                bundledModel(.anime)
             }
             Section("Optional model") {
                 LabeledContent {
@@ -918,6 +950,7 @@ private struct AboutSettings: View {
                     Link("DRCT-L", destination: URL(string: "https://huggingface.co/Phips/4xNomos2_hq_drct-l")!)
                     Link("HAT-L", destination: URL(string: "https://huggingface.co/Phips/4xNomos8kSCHAT-L")!)
                 }
+                Link("Anime 6B (Real-ESRGAN)", destination: URL(string: "https://github.com/xinntao/Real-ESRGAN/blob/master/docs/anime_model.md")!)
                 Link("SeedVR2 (ByteDance Seed)", destination: URL(string: "https://github.com/numz/ComfyUI-SeedVR2_VideoUpscaler")!)
                 Text("The app and command line tool are under the PolyForm Noncommercial License 1.0.0.")
                     .foregroundStyle(.secondary)
@@ -1145,7 +1178,7 @@ struct UpscalerView: View {
                 .labelsHidden()
                 .fixedSize()
                 .disabled(job.running)
-                Text(window.model.description)
+                Text(window.model.guidance)
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
