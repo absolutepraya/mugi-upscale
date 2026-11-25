@@ -19,7 +19,7 @@ Local AI image upscaler for macOS. Enlarge photos and AI-generated images to 4K,
 
 </div>
 
-Mugi includes a native SwiftUI app and a command line tool. Choose SeedVR2 to reconstruct texture, DRCT-L for clean graphics, HAT-L for soft or compressed photos, or Anime 6B for cleaner anime and cartoons. Each model runs locally through Metal after its weights are available.
+Mugi includes a native SwiftUI app and a command line tool. Choose SeedVR2 to reconstruct texture, Anime 6B for cleaner anime and cartoons, DRCT-L for clean graphics, or HAT-L for soft or compressed photos. Each model runs locally through Metal after its weights are available.
 
 ## Preview
 

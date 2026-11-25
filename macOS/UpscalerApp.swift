@@ -4,7 +4,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 enum UpscaleModel: String, CaseIterable, Identifiable {
-    case seedvr2, drct, hat, anime
+    case seedvr2, anime, drct, hat
 
     static let defaultChoice: Self = .seedvr2
 
