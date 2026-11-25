@@ -592,7 +592,8 @@ enum ImageExporter {
 
 private enum SettingsKey {
     static let all = ["appearance", "defaultModel", "longEdge", "defaultOutputSize", "tile", "autoSave",
-                      "outputFolder", "outputFormat", "quality", "haptics", "settingsTab"]
+                      "outputFolder", "outputFormat", "quality", "haptics", "settingsTab",
+                      "showStats", "statsValues"]
 }
 
 struct SettingsView: View {
@@ -624,6 +625,8 @@ private struct GeneralSettings: View {
     @AppStorage("defaultOutputSize") private var defaultOutputSize = ""
     @AppStorage("tile") private var tile = 256
     @AppStorage("haptics") private var haptics = true
+    @AppStorage("showStats") private var showStats = true
+    @AppStorage("statsValues") private var statsValues = StatsValues.percent
     @State private var confirmingReset = false
 
     var body: some View {
@@ -669,6 +672,18 @@ private struct GeneralSettings: View {
                     }
                 }
                 Text("For DRCT-L and HAT-L, smaller tiles use less memory but take longer.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("System stats") {
+                Toggle("Show CPU, memory, and GPU usage", isOn: $showStats)
+                Picker("Values", selection: $statsValues) {
+                    ForEach(StatsValues.allCases) { Text($0.name).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .disabled(!showStats)
+                Text("Used / total shows busy cores, memory in GB, and the GPU's share of memory. Hover a gauge for details.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -941,6 +956,8 @@ struct UpscalerView: View {
     @AppStorage("outputFormat") private var outputFormat = OutputFormat.png
     @AppStorage("quality") private var quality = 0.95
     @AppStorage("haptics") private var haptics = true
+    @AppStorage("showStats") private var showStats = true
+    @AppStorage("statsValues") private var statsValues = StatsValues.percent
     @GestureState private var dragTranslation = CGSize.zero
 
     private var defaultSizeRequest: OutputSizeRequest {
@@ -1125,7 +1142,13 @@ struct UpscalerView: View {
                 }
             }
             .frame(height: 6)
-            statusRow
+            HStack(alignment: .bottom, spacing: 16) {
+                statusRow
+                if showStats {
+                    SystemMonitor(values: statsValues)
+                        .fixedSize()
+                }
+            }
         }
         .controlSize(.large)
         .padding(.horizontal, 10)
