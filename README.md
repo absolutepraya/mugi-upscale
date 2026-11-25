@@ -13,11 +13,29 @@ Upscale photos to 4K on your Mac. Everything runs locally on the GPU, so your ph
 ![Python 3.12](https://img.shields.io/badge/Python-3.12-3776ab?style=flat-square&logo=python&logoColor=white)
 [![License](https://img.shields.io/badge/License-PolyForm_Noncommercial_1.0.0-blue?style=flat-square)](LICENSE)
 
-[Features](#features) • [Install](#install) • [Use the app](#use-the-app) • [Command line](#command-line) • [Models](#models) • [Build a DMG](#build-a-dmg)
+[Preview](#preview) • [Features](#features) • [Install](#install) • [Use the app](#use-the-app) • [Command line](#command-line) • [Models](#models) • [Build a DMG](#build-a-dmg)
 
 </div>
 
 Mugi is a native SwiftUI app and a command line tool for enlarging images with DRCT-L, HAT-L, or SeedVR2. All three run on Apple Silicon through Metal. Processing stays offline after the selected model's weights are available.
+
+## Preview
+
+![Mugi v0.2.0 showing the original launch image and the SeedVR2 result side by side, with output controls and model ratings below](assets/examples/mugi-screenshot.png)
+
+### Before and after with SeedVR2
+
+Select either image to open it at full size. The 4K example is a WebP copy of the exported PNG.
+
+| Original JPEG · 1,376 × 768                                                                                                                | SeedVR2 · 3,840 × 2,143                                                                                                          |
+| ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| [![Original image of a rocket trail over a coastal launch site](assets/examples/launch-original.jpg)](assets/examples/launch-original.jpg) | [![SeedVR2 4K upscale of the same launch scene](assets/examples/launch-seedvr2-4k.webp)](assets/examples/launch-seedvr2-4k.webp) |
+
+The close-ups use the same framing around the launch site. The original is enlarged to match.
+
+| Original detail                                                                                              | SeedVR2 detail                                                                                                           |
+| ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| ![Enlarged original crop of launch towers, roads, and shoreline](assets/examples/launch-original-detail.png) | ![Matching SeedVR2 crop showing finer detail around the towers and shoreline](assets/examples/launch-seedvr2-detail.png) |
 
 ## Features
 
