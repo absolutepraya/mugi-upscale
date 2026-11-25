@@ -69,9 +69,11 @@ Setup creates a local Python environment, downloads the SeedVR2 runtime source, 
 4. Click **Upscale**. The timer includes model loading and PNG preparation. SeedVR2 shows its processing stage and may take several minutes. If the chosen size is not larger than the photo, the button reads **Resize** and Mugi resizes it without a model.
 5. When the second preview appears, click **Save…**, or turn on auto-save in Settings.
 
+The bottom right shows live CPU, memory, and GPU gauges. Hover one for details such as busy cores or GB in use.
+
 The icon buttons at the top right switch between System, Light, and Dark appearance and open **Settings** (⌘,).
 
-- **General:** appearance, default model with its source fidelity and natural texture bars, default output size (by scale, long edge, width, or height), tile size under Advanced, haptic feedback, and a reset for all settings.
+- **General:** appearance, default model with its source fidelity and natural texture bars, default output size (by scale, long edge, width, or height), tile size under Advanced, the system stats gauges (show or hide them, and show percentages, used / total, or no value text), haptic feedback, and a reset for all settings.
 - **Models:** check model availability, reveal model files in Finder, and download or delete SeedVR2. DRCT-L and HAT-L are included with Mugi.
 - **Output:** auto-save, the default output folder, and the image format, with a quality slider for JPEG and HEIC.
 - **About:** credits, source code, and model licenses.
