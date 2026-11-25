@@ -12,6 +12,6 @@
 4. Open **Mugi** from Applications and choose an image.
 
 The app requires an Apple Silicon Mac running macOS 14 or newer. The
-release uses ad-hoc signing. Python and the DRCT-L and HAT-L weights are
+release uses ad-hoc signing. Python and the DRCT-L, HAT-L, and Anime 6B weights are
 bundled. To use SeedVR2, select it and click **Download** to install about
 4 GB of weights. All image processing runs locally.

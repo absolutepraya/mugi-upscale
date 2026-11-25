@@ -32,8 +32,9 @@ runtime="$engine/python"
 mkdir -p "$engine/models" "$runtime"
 cp upscale.py seedvr2.py seedvr2-model.json "$engine/"
 cp -R seedvr2-runtime "$engine/"
-cp README.md LICENSE "$app/Contents/Resources/"
-cp models/4xNomos2_hq_drct-l.safetensors models/4xNomos8kSCHAT-L.safetensors "$engine/models/"
+cp README.md LICENSE packaging/REAL-ESRGAN-LICENSE.txt "$app/Contents/Resources/"
+cp models/4xNomos2_hq_drct-l.safetensors models/4xNomos8kSCHAT-L.safetensors \
+    models/RealESRGAN_x4plus_anime_6B.pth "$engine/models/"
 
 # uv's managed CPython is relocatable. Install directly into the copy in the bundle.
 uv python install 3.12.12 --install-dir "$work/python" --no-bin
