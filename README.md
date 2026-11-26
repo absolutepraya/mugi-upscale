@@ -4,7 +4,9 @@
 
 # Mugi
 
-Local AI image upscaler for macOS. Enlarge photos and AI-generated images to 4K, 8K, or a custom size on your Apple Silicon Mac.
+**Make AI images camera-sharp. Local generative upscaling for your Mac.**
+
+Image generators often hand back soft, low-resolution pictures with smeared texture. Mugi enlarges them to 4K, 8K, or a custom size and rebuilds the fine detail, entirely on your Apple Silicon Mac. It works on ordinary photos too.
 
 **[Download Mugi for Apple Silicon](https://github.com/absolutepraya/mugi-upscale/releases/latest)**
 
@@ -19,7 +21,7 @@ Local AI image upscaler for macOS. Enlarge photos and AI-generated images to 4K,
 
 </div>
 
-Mugi includes a native SwiftUI app and a command line tool. Choose SeedVR2 to reconstruct texture, Anime 6B for cleaner anime and cartoons, DRCT-L for clean graphics, or HAT-L for soft or compressed photos. Each model runs locally through Metal after its weights are available.
+Mugi includes a native SwiftUI app and a command line tool. Choose SeedVR2 for generative upscaling that rebuilds realistic texture, the best fit for AI-generated photos, Anime 6B for cleaner anime and cartoons, DRCT-L for clean graphics, or HAT-L for soft or compressed photos. Each model runs locally through Metal after its weights are available.
 
 ## Preview
 
