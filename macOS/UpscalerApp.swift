@@ -929,7 +929,7 @@ private struct AboutSettings: View {
                 Text("Version \(Bundle.main.mugiVersion)").font(.callout).foregroundStyle(.secondary)
             }
             UpdateSection()
-            Text("Upscale photos to 4K privately on your Mac. Everything runs on your GPU and nothing leaves your machine.")
+            Text("The upscaler for your AI-generated images, and your photos too. Everything runs on your Mac's GPU, so nothing leaves your machine.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

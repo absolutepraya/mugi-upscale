@@ -4,7 +4,7 @@
 
 # Mugi
 
-**Make AI images camera-sharp. Local generative upscaling for your Mac.**
+**The upscaler for your AI-generated images, running locally on your Mac.**
 
 Image generators often hand back soft, low-resolution pictures with smeared texture. Mugi enlarges them to 4K, 8K, or a custom size and rebuilds the fine detail, entirely on your Apple Silicon Mac. It works on ordinary photos too.
 
