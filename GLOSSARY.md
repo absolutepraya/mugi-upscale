@@ -1,6 +1,6 @@
 # Mugi
 
-Mugi is a local image upscaler for Apple Silicon. This glossary names the parts of its window and the ideas behind updating the app.
+Mugi is a local upscaler for AI-generated images and photos on Apple Silicon. This glossary names the parts of its window and the ideas behind updating the app.
 
 ## Language
 

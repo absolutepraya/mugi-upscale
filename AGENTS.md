@@ -1,6 +1,6 @@
 # Mugi
 
-Local image upscaler for Apple Silicon. A SwiftUI app (`macOS/`) drives a Python engine (`upscale.py`, `seedvr2.py`) that runs DRCT-L, HAT-L, SeedVR2, or Anime 6B through Metal. See `README.md` for what the app does and how to use it.
+Local upscaler for AI-generated images and photos on Apple Silicon. A SwiftUI app (`macOS/`) drives a Python engine (`upscale.py`, `seedvr2.py`) that runs DRCT-L, HAT-L, SeedVR2, or Anime 6B through Metal. See `README.md` for what the app does and how to use it.
 
 ## Commands
 
